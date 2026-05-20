@@ -1,14 +1,45 @@
-
 "use client"
 
-import GlassButton from "@/components/glass/GlassButton"
-import GlassCard from "@/components/glass/GlassCard"
-import SupabaseAuth from "@/components/auth/SupabaseAuth"
-import { motion } from "framer-motion"
-import { Trophy, Zap, Shield, Globe, ArrowRight } from "lucide-react"
-import Link from "next/link"
+import { useState, useEffect } from "react";
+import { Session } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabaseClient";
+import GlassButton from "@/components/glass/GlassButton";
+import GlassCard from "@/components/glass/GlassCard";
+import { motion } from "framer-motion";
+import { Trophy, Zap, Shield, Globe, ArrowRight, LogOut } from "lucide-react";
+import Link from "next/link";
 
 export default function Home() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const getSession = async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        console.error("Error getting session:", error);
+      }
+      setSession(data.session);
+      setLoading(false);
+    };
+
+    getSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
   return (
     <div className="flex flex-col">
       {/* Navbar */}
@@ -25,8 +56,18 @@ export default function Home() {
           <Link href="/portal" className="text-muted-foreground hover:text-foreground transition-colors text-sm">Player Portal</Link>
         </div>
         <div className="flex items-center gap-4">
-          <SupabaseAuth />
-          <GlassButton>Get Started</GlassButton>
+          {loading ? (
+            <GlassButton disabled>Loading...</GlassButton>
+          ) : session ? (
+            <GlassButton onClick={handleSignOut}>
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </GlassButton>
+          ) : (
+            <Link href="/login">
+              <GlassButton>Get Started</GlassButton>
+            </Link>
+          )}
         </div>
       </nav>
 
