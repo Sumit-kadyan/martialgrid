@@ -31,24 +31,36 @@ const OnboardingPage = () => {
   const router = useRouter()
 
   useEffect(() => {
-    const checkOnboardingStatus = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+    // This effect now correctly handles real-time auth changes.
+    const checkOnboardingStatus = async (user: any) => {
+      if (!user) return;
+      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('onboarding_completed')
+        .eq('id', user.id)
+        .single();
 
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('onboarding_completed')
-          .eq('id', user.id)
-          .single()
-
-        if (profile?.onboarding_completed) {
-          router.push('/dashboard')
-        }
+      if (profile?.onboarding_completed) {
+        router.push('/dashboard');
       }
-    }
+    };
 
-    checkOnboardingStatus()
-  }, [router])
+    // Check immediately on mount
+    supabase.auth.getUser().then(({ data: { user } }) => {
+        checkOnboardingStatus(user);
+    });
+
+    // Then listen for future auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        checkOnboardingStatus(session?.user);
+    });
+
+    // Cleanup subscription on unmount
+    return () => {
+        subscription.unsubscribe();
+    };
+}, [router]);
 
   const handleNext = () => setStep(step + 1)
   const handlePrevious = () => setStep(step - 1)
