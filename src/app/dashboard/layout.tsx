@@ -121,7 +121,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex items-center gap-2 mb-12">
           <Link href="/" className="flex items-center gap-2">
             <Zap className="text-primary w-6 h-6" />
-            <span className="font-headline font-bold text-foreground text-xl tracking-tighter">VORTEX CORE</span>
+            <span className="font-headline font-bold text-foreground text-xl tracking-tighter">MARTIAL GRID</span>
           </Link>
         </div>
 

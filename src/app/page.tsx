@@ -63,7 +63,7 @@ export default function Home() {
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">SPORTS ARENAS</span>
           </h1>
           <p className="text-muted-foreground text-lg md:text-xl max-w-2xl mx-auto mb-12 font-body">
-            Vortex Arena is the world's most immersive tournament engine. Fluid brackets, real-time pulse analytics, and smart AI seeding.
+            Martial Grid is the world's most immersive tournament engine. Fluid brackets, real-time pulse analytics, and smart AI seeding.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/explore">

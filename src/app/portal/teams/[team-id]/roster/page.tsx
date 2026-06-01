@@ -73,7 +73,7 @@ export default function TeamRoster() {
            <GlassCard className="glass-surface-strong relative z-10 w-full rounded-3xl animate-in slide-in-from-bottom-10">
               <div className="w-12 h-1 bg-white/10 rounded-full mx-auto mb-6" />
               <h3 className="text-xl font-headline font-bold text-white mb-2">Invite Player</h3>
-              <p className="text-white/40 text-sm mb-6">Send an invite link to their email or Vortex Arena ID.</p>
+              <p className="text-white/40 text-sm mb-6">Send an invite link to their email or Martial Grid ID.</p>
               
               <div className="space-y-4 mb-8">
                 <div className="relative">

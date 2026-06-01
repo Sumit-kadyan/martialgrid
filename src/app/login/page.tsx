@@ -14,7 +14,7 @@ export default function LoginPage() {
           <div className="w-8 h-8 bg-primary rounded-lg neon-glow-blue flex items-center justify-center">
             <Zap className="text-white w-5 h-5 fill-current" />
           </div>
-          <span className="font-headline text-xl font-bold tracking-tight text-foreground">VORTEX ARENA</span>
+          <span className="font-headline text-xl font-bold tracking-tight text-foreground">MARTIAL GRID</span>
         </div>
         <div className="flex items-center gap-4">
           <Link href="/explore" className="text-muted-foreground hover:text-foreground transition-colors text-sm">Explore</Link>

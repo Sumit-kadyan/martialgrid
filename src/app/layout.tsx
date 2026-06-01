@@ -4,7 +4,7 @@ import './globals.css';
 import LiquidBackground from '@/components/layout/LiquidBackground';
 
 export const metadata: Metadata = {
-  title: 'Vortex Arena | Elite Tournament Management',
+  title: 'Martial Grid | Elite Tournament Management',
   description: 'Next-gen multi-sport tournament management with liquid analytics and smart seeding.',
 };
 

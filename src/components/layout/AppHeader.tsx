@@ -58,7 +58,7 @@ export default function AppHeader() {
             <div className="w-8 h-8 bg-primary rounded-lg neon-glow-blue flex items-center justify-center">
                 <Zap className="text-white w-5 h-5 fill-current" />
             </div>
-            <span className="font-headline text-xl font-bold tracking-tight text-foreground">VORTEX ARENA</span>
+            <span className="font-headline text-xl font-bold tracking-tight text-foreground">Martial Grid</span>
         </Link>
       </div>
       <div className="flex items-center gap-4">

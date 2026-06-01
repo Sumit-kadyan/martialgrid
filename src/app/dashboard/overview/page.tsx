@@ -1,163 +1,161 @@
+'use client'
 
-"use client"
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
+import { motion } from 'framer-motion';
+import GlassCard from '@/components/glass/GlassCard';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { Plus, BarChart2, Shield, Users, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 
-import { useEffect, useState } from 'react'
-import GlassCard from "@/components/glass/GlassCard"
-import { Users, Trophy, DollarSign, Activity, ArrowUpRight, TrendingUp } from "lucide-react"
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  AreaChart,
-  Area
-} from 'recharts'
+const StatCard = ({ title, value, icon }: { title: string, value: string | number, icon: React.ReactNode }) => (
+    <GlassCard className="p-6 flex flex-col justify-between">
+        <div className="flex justify-between items-center">
+            <h3 className="text-lg font-bold text-muted-foreground">{title}</h3>
+            {icon}
+        </div>
+        <p className="text-4xl font-bold mt-2">{value}</p>
+    </GlassCard>
+);
 
-const CHART_DATA = [
-  { name: 'Mon', value: 400 },
-  { name: 'Tue', value: 300 },
-  { name: 'Wed', value: 600 },
-  { name: 'Thu', value: 800 },
-  { name: 'Fri', value: 500 },
-  { name: 'Sat', value: 900 },
-  { name: 'Sun', value: 1100 },
-]
+const TournamentCard = ({ tournament, teamCount }: { tournament: any, teamCount: number }) => {
+    const getStatus = () => {
+        const now = new Date();
+        const start = new Date(tournament.start_date);
+        const end = new Date(tournament.end_date);
+        if (now > end) return { text: 'Completed', color: 'text-gray-400' };
+        if (now >= start && now <= end) return { text: 'Live', color: 'text-green-400 animate-pulse' };
+        return { text: 'Upcoming', color: 'text-yellow-400' };
+    };
 
-export default function DashboardOverview() {
-  const [tournaments, setTournaments] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+    const status = getStatus();
 
-  useEffect(() => {
-    async function loadTournaments() {
-      try {
-        const res = await fetch('/api/tournaments')
-        const json = await res.json()
-
-        if (!res.ok) {
-          throw new Error(json.error || 'Failed to load tournaments')
-        }
-
-        setTournaments(json.tournaments ?? [])
-      } catch (err) {
-        setError((err as Error).message)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadTournaments()
-  }, [])
-
-  return (
-    <div className="space-y-8">
-      {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[
-          { label: 'Active Players', value: '1,284', icon: Users, color: 'text-primary', trend: '+12%' },
-          { label: 'Live Matches', value: '24', icon: Activity, color: 'text-red-500', trend: '+5' },
-          { label: 'Total Revenue', value: '$48,250', icon: DollarSign, color: 'text-accent', trend: '+18%' },
-          { label: 'Tournaments', value: '12', icon: Trophy, color: 'text-yellow-600', trend: '0' },
-        ].map((stat, i) => (
-          <GlassCard key={stat.label} className="flex items-center gap-6 relative overflow-hidden group">
-            <div className={`p-4 rounded-2xl bg-black/5 border border-black/5 group-hover:neon-glow-blue transition-all duration-500`}>
-              <stat.icon className={`w-6 h-6 ${stat.color}`} />
+    return (
+        <GlassCard className="p-5 flex flex-col justify-between hover:border-primary/50 transition-all duration-300">
+            <div>
+                <div className="flex justify-between items-start mb-3">
+                    <h4 className="font-bold text-xl mb-1">{tournament.name}</h4>
+                    <span className={`font-bold text-sm ${status.color}`}>{status.text}</span>
+                </div>
+                <div className="text-xs text-muted-foreground space-y-1 mb-4">
+                    <p>{tournament.sport} | {tournament.level}</p>
+                    <p>{new Date(tournament.start_date).toLocaleDateString()} - {new Date(tournament.end_date).toLocaleDateString()}</p>
+                </div>
             </div>
             <div>
-              <div className="text-muted-foreground text-[10px] font-bold uppercase tracking-widest mb-1">{stat.label}</div>
-              <div className="flex items-baseline gap-2">
-                <div className="text-2xl font-headline font-bold text-foreground">{stat.value}</div>
-                <div className="text-[10px] font-bold text-accent">{stat.trend}</div>
-              </div>
-            </div>
-          </GlassCard>
-        ))}
-      </div>
-
-      <div className="grid lg:grid-cols-3 gap-8">
-        {/* Main Chart */}
-        <GlassCard className="lg:col-span-2">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-lg font-headline font-bold text-foreground flex items-center gap-2">
-              <TrendingUp className="text-primary w-5 h-5" />
-              Arena Density
-            </h3>
-            <select className="bg-black/5 border border-black/10 rounded-lg text-xs p-2 text-muted-foreground focus:outline-none">
-              <option>Last 7 Days</option>
-              <option>Last 30 Days</option>
-            </select>
-          </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={CHART_DATA}>
-                <defs>
-                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#1E61FF" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#1E61FF" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: 'rgba(0,0,0,0.3)', fontSize: 10 }}
-                  dy={10}
-                />
-                <YAxis hide />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                    border: '1px solid rgba(0,0,0,0.05)',
-                    borderRadius: '12px',
-                    color: '#000',
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
-                  }} 
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="value" 
-                  stroke="#1E61FF" 
-                  strokeWidth={3}
-                  fillOpacity={1} 
-                  fill="url(#colorValue)" 
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </GlassCard>
-
-        {/* Upcoming Tournaments */}
-        <GlassCard>
-          <h3 className="text-lg font-headline font-bold text-foreground mb-6">Upcoming Tournaments</h3>
-
-          {loading ? (
-            <div className="text-sm text-muted-foreground">Loading tournament data…</div>
-          ) : error ? (
-            <div className="text-sm text-red-500">Error: {error}</div>
-          ) : tournaments.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No upcoming tournaments found.</div>
-          ) : (
-            <div className="space-y-4">
-              {tournaments.map((tournament) => (
-                <div key={tournament.id} className="flex gap-4 group">
-                  <div className="w-1 h-12 bg-black/5 rounded-full overflow-hidden">
-                    <div className="w-full h-full bg-primary" />
-                  </div>
-                  <div>
-                    <div className="text-foreground font-bold text-xs uppercase tracking-[0.2em] mb-1">{tournament.status || 'Scheduled'}</div>
-                    <div className="text-sm font-semibold text-foreground">{tournament.name}</div>
-                    <div className="text-muted-foreground text-[11px] mt-1">{tournament.starts_at ? new Date(tournament.starts_at).toLocaleDateString() : 'Start date not set'}</div>
-                  </div>
+                <div className="flex justify-between items-center text-xs mb-1">
+                    <span className="text-muted-foreground">Registrations</span>
+                    <span>{teamCount} / {tournament.max_teams}</span>
                 </div>
-              ))}
+                <Progress value={(teamCount / tournament.max_teams) * 100} />
+                <div className="mt-4 flex gap-2">
+                    <Link href={`/organizer/manage-tournament/${tournament.id}`} className="flex-1"><Button className="w-full">Manage Event</Button></Link>
+                    <Link href={`/tournament/${tournament.id}`} className="flex-1"><Button variant="outline" className="w-full">Public Page</Button></Link>
+                </div>
             </div>
-          )}
         </GlassCard>
-      </div>
-    </div>
-  )
-}
+    );
+};
+
+
+const OverviewPage = () => {
+    const [user, setUser] = useState<any>(null);
+    const [tournaments, setTournaments] = useState<any[]>([]);
+    const [teams, setTeams] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('Upcoming');
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) { setLoading(false); return; }
+
+            const { data: profile } = await supabase.from('profiles').select('name').eq('id', user.id).single();
+            setUser({ ...user, name: profile?.name });
+
+            const { data: tournamentData } = await supabase.from('tournaments').select('*').eq('organizer_id', user.id);
+            setTournaments(tournamentData || []);
+
+            if (tournamentData && tournamentData.length > 0) {
+                const tournamentIds = tournamentData.map(t => t.id);
+                const { data: teamData } = await supabase.from('teams').select('id, tournament_id').in('tournament_id', tournamentIds);
+                setTeams(teamData || []);
+            }
+            setLoading(false);
+        };
+        fetchData();
+    }, []);
+
+    const filteredTournaments = tournaments.filter(t => {
+        const now = new Date();
+        const start = new Date(t.start_date);
+        const end = new Date(t.end_date);
+        if (activeTab === 'Live') return now >= start && now <= end;
+        if (activeTab === 'Completed') return now > end;
+        if (activeTab === 'Upcoming') return now < start;
+        return true;
+    });
+
+    const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
+    const itemVariants = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
+
+    if (loading) {
+        return (
+                <div className="p-8">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {[...Array(3)].map((_, i) => <GlassCard key={i} className="h-32 animate-pulse"></GlassCard>)}
+                    </div>
+                    <div className="mt-8">
+                        <GlassCard className="h-96 animate-pulse"></GlassCard>
+                    </div>
+                </div>
+        );
+    }
+    
+    const activeTournaments = tournaments.filter(t => new Date(t.end_date) >= new Date());
+
+    return (
+            <motion.div variants={containerVariants} initial="hidden" animate="visible" className="p-4 sm:p-8">
+                <motion.div variants={itemVariants} className="flex flex-col sm:flex-row justify-between items-center mb-8">
+                    <h1 className="text-3xl font-bold font-headline">Welcome back, {user?.name || 'Organizer'}!</h1>
+                    <Link href="/organizer/create-tournament">
+                        <Button size="lg" className="mt-4 sm:mt-0 neon-glow-primary"><Plus className="mr-2" /> Create New Tournament</Button>
+                    </Link>
+                </motion.div>
+
+                <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <StatCard title="Total Tournaments" value={tournaments.length} icon={<BarChart2 className="text-primary" />} />
+                    <StatCard title="Active Events" value={activeTournaments.length} icon={<Shield className="text-green-400" />} />
+                    <StatCard title="Total Teams Registered" value={teams.length} icon={<Users className="text-yellow-400" />} />
+                </motion.div>
+
+                <motion.div variants={itemVariants}>
+                    <GlassCard>
+                        <div className="p-4 border-b border-white/10 flex gap-2">
+                            {['Upcoming', 'Live', 'Completed'].map(tab => (
+                                <Button key={tab} variant={activeTab === tab ? 'default' : 'ghost'} onClick={() => setActiveTab(tab)}>{tab}</Button>
+                            ))}
+                        </div>
+                        {tournaments.length === 0 ? (
+                            <div className="text-center p-20">
+                                <h3 className="text-2xl font-bold">No Tournaments Yet</h3>
+                                <p className="text-muted-foreground mb-6">It's time to kick things off. Create your first tournament to get started.</p>
+                                <Link href="/organizer/create-tournament"><Button>Create First Tournament <ArrowRight className="ml-2" /></Button></Link>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+                                {filteredTournaments.map(t => (
+                                    <TournamentCard key={t.id} tournament={t} teamCount={teams.filter(team => team.tournament_id === t.id).length} />
+                                ))}
+                            </div>
+                        )}
+                    </GlassCard>
+                </motion.div>
+            </motion.div>
+    );
+};
+
+export default OverviewPage;

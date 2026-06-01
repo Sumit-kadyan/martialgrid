@@ -27,7 +27,7 @@ export default function PlayerPortalLayout({ children }: { children: React.React
       <header className="h-16 px-6 border-b border-black/5 flex items-center justify-between backdrop-blur-md sticky top-0 z-40 bg-white/40">
         <div className="flex items-center gap-2">
           <Zap className="text-primary w-5 h-5" />
-          <span className="font-headline font-bold text-foreground tracking-tighter">VORTEX PORTAL</span>
+          <span className="font-headline font-bold text-foreground tracking-tighter">Martial Grid</span>
         </div>
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent shadow-sm" />
       </header>
