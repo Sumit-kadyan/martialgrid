@@ -55,10 +55,11 @@ export default function AppHeader() {
     <header className="h-20 border-b border-black/5 backdrop-blur-md sticky top-0 z-50 px-6 flex items-center justify-between">
       <div className="flex items-center gap-2">
         <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg neon-glow-blue flex items-center justify-center">
-                <Zap className="text-white w-5 h-5 fill-current" />
-            </div>
-            <span className="font-headline text-xl font-bold tracking-tight text-foreground">Martial Grid</span>
+            <img 
+              src="/logo.webp" 
+              alt="Martial Grid Logo" 
+              className="h-16 w-auto object-contain" // Adjust height and let width auto-adjust to maintain aspect ratio
+            />
         </Link>
       </div>
       <div className="flex items-center gap-4">

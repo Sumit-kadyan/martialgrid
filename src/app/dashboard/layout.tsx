@@ -118,11 +118,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen bg-background">
       <aside className="w-64 border-r border-black/5 glass-surface p-6 flex flex-col fixed h-screen z-50">
-        <div className="flex items-center gap-2 mb-12">
-          <Link href="/" className="flex items-center gap-2">
-            <Zap className="text-primary w-6 h-6" />
-            <span className="font-headline font-bold text-foreground text-xl tracking-tighter">MARTIAL GRID</span>
-          </Link>
+        <div className="flex items-center gap-2 mb-7">
+        <Link href="/" className="flex items-center gap-2">
+            <img 
+              src="/logo.webp" 
+              alt="Martial Grid Logo" 
+              className="h-20 w-auto object-contain" // Adjust height and let width auto-adjust to maintain aspect ratio
+            />
+        </Link>
         </div>
 
         <nav className="flex-1 space-y-2">
