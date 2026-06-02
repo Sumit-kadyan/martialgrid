@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-import Link from 'next/link';
 import DashboardLayout from '@/app/dashboard/layout';
 import GlassCard from '@/components/glass/GlassCard';
 import GlassButton from '@/components/glass/GlassButton';
@@ -13,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ChevronLeft, Loader2, Edit, Users, ShieldCheck, Trophy, Settings, Clock, ArrowRight, Save, Calendar, MapPin, UserPlus, X, CheckCircle2 } from 'lucide-react';
+import { ChevronLeft, Loader2, Edit, Users, ShieldCheck, Trophy, Settings, Clock, ArrowRight, Save, Calendar, MapPin, UserPlus, X, CheckCircle2, AlertCircle, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const ManageTournamentPage = () => {
@@ -42,6 +41,15 @@ const ManageTournamentPage = () => {
     const [matchLoading, setMatchLoading] = useState(false);
     const [participantLoading, setParticipantLoading] = useState(false);
 
+    // --- CUSTOM UI STATES ---
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const [teamToRemove, setTeamToRemove] = useState<{ teamId: string; coachId: string } | null>(null);
+
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 4000);
+    };
+
     const fetchTournament = useCallback(async () => {
         setLoading(true);
         const { data, error } = await supabase
@@ -62,18 +70,14 @@ const ManageTournamentPage = () => {
     const fetchParticipants = useCallback(async () => {
         setParticipantLoading(true);
         
-        // FIX: Removed the deeply nested 'coaches(profiles(name))' join that causes PostgREST relation errors.
-        // We now fetch the core team data safely to guarantee it renders for the Organizer.
         const { data, error } = await supabase
             .from('teams')
             .select(`id, coach_id, name, logo_url, status`)
             .eq('tournament_id', tournamentId);
 
-        if (error) {
-            console.error("Error fetching enrolled teams:", error);
-        }
-
+        if (error) console.error("Error fetching enrolled teams:", error);
         if (data) setParticipants(data);
+        
         setParticipantLoading(false);
     }, [tournamentId]);
 
@@ -150,68 +154,109 @@ const ManageTournamentPage = () => {
         setSaving(false);
         if (!error) {
             setInitialTournament(tournament);
-            alert("Changes saved successfully!");
+            showToast("Changes saved successfully!", "success");
         } else {
-            alert(`Error saving: ${error.message}`);
+            showToast(`Error saving: ${error.message}`, "error");
         }
     };
 
     // --- TEAMS & INVITES LOGIC ---
-    const handleRemoveTeam = async (teamId: string, coachId: string) => {
-        const confirmRemove = window.confirm("Are you sure you want to remove this team? They will have to be re-invited.");
-        if (!confirmRemove) return;
+    const promptRemoveTeam = (teamId: string, coachId: string) => {
+        setTeamToRemove({ teamId, coachId });
+    };
 
+    const executeRemoveTeam = async () => {
+        if (!teamToRemove) return;
+        const { teamId, coachId } = teamToRemove;
+
+        // 1. Remove the team from the active tournament roster
         await supabase.from('teams').delete().eq('id', teamId);
         
+        // 2. RLS-SAFE FIX: Update invite to rejected (safer than trying to DELETE which databases often block)
         await supabase.from('tournament_invitations')
             .update({ status: 'rejected' })
             .eq('tournament_id', tournamentId)
             .eq('coach_id', coachId);
 
         setParticipants(prev => prev.filter(t => t.id !== teamId));
+        setTeamToRemove(null);
+        showToast("Team removed. You can now send them a new invite.", "success");
     };
 
+    // --- RLS SAFE INVITE ENGINE ---
     const handleSendInvite = async (coachId: string) => {
         if (participants.length + pendingInvites.length >= tournament.max_teams) {
-            alert("You have reached the maximum number of teams (including pending invites).");
+            showToast("You have reached the maximum number of teams.", "error");
             return;
         }
 
         setInvitingCoachId(coachId);
 
-        const { data: invite, error: inviteError } = await supabase.from('tournament_invitations').insert({
-            tournament_id: tournamentId,
-            organizer_id: tournament.organizer_id,
-            coach_id: coachId,
-            status: 'pending'
-        }).select().single();
+        try {
+            // 1. Check if the coach already has ANY invite history for this tournament
+            const { data: existingInvite } = await supabase
+                .from('tournament_invitations')
+                .select('id')
+                .eq('tournament_id', tournamentId)
+                .eq('coach_id', coachId)
+                .maybeSingle();
 
-        if (inviteError) {
-            console.error("Invite Error:", inviteError);
-            alert("Failed to track invite.");
-            setInvitingCoachId(null);
-            return;
-        }
+            let inviteId = existingInvite?.id;
 
-        const { error: notifError } = await supabase.from('notifications').insert({
-            user_id: coachId, 
-            type: 'tournament_invite',
-            message: `You have been invited to participate in ${tournament.name}!`,
-            metadata: { 
-                tournament_invite_id: invite.id, 
-                tournament_name: tournament.name,
-                organizer_id: tournament.organizer_id
+            // 2. RLS-SAFE LOGIC: Do not chain .select().single() on mutations to prevent `{}` crash
+            if (existingInvite) {
+                // Reactivate old invite
+                const { error: updErr } = await supabase
+                    .from('tournament_invitations')
+                    .update({ status: 'pending' })
+                    .eq('id', existingInvite.id);
+                    
+                if (updErr) throw updErr;
+            } else {
+                // Create brand new invite
+                const { error: insErr } = await supabase
+                    .from('tournament_invitations')
+                    .insert({
+                        tournament_id: tournamentId,
+                        organizer_id: tournament.organizer_id,
+                        coach_id: coachId,
+                        status: 'pending'
+                    });
+                    
+                if (insErr) throw insErr;
+                
+                // Fetch the new ID safely afterwards
+                const { data: newInv } = await supabase
+                    .from('tournament_invitations')
+                    .select('id')
+                    .eq('tournament_id', tournamentId)
+                    .eq('coach_id', coachId)
+                    .maybeSingle();
+                    
+                if (newInv) inviteId = newInv.id;
             }
-        });
 
-        if (notifError) {
-            console.error("Notification Error:", notifError);
-            alert("Invite saved, but notification failed to send. Check RLS policies.");
-        } else {
+            // 3. Fire the notification
+            await supabase.from('notifications').insert({
+                user_id: coachId, 
+                type: 'tournament_invite',
+                message: `You have been invited to participate in ${tournament.name}!`,
+                metadata: { 
+                    tournament_invite_id: inviteId, 
+                    tournament_name: tournament.name,
+                    organizer_id: tournament.organizer_id
+                }
+            });
+
             setPendingInvites(prev => [...prev, coachId]);
-        }
+            showToast("Invite sent successfully!", "success");
 
-        setInvitingCoachId(null);
+        } catch (error) {
+            console.error("Invite Database Error:", error);
+            showToast("Action blocked by database security. Check RLS policies.", "error");
+        } finally {
+            setInvitingCoachId(null);
+        }
     };
 
     // --- RENDER BLOCKERS ---
@@ -249,6 +294,44 @@ const ManageTournamentPage = () => {
         <DashboardLayout>
             <div className="max-w-6xl mx-auto p-4 sm:p-8">
                 
+                {/* IN-APP TOAST NOTIFICATIONS */}
+                <AnimatePresence>
+                    {toast && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+                            className={`fixed bottom-6 right-6 z-50 px-6 py-4 rounded-xl shadow-2xl font-bold flex items-center gap-3 ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}
+                        >
+                            {toast.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                            {toast.message}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* IN-APP CONFIRM MODAL (REMOVE TEAM) */}
+                <AnimatePresence>
+                    {teamToRemove && (
+                        <motion.div 
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                        >
+                            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}>
+                                <GlassCard className="p-8 max-w-md w-full border-red-500/30 shadow-[0_0_40px_rgba(239,68,68,0.15)] text-center relative overflow-hidden">
+                                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full bg-red-500/5 blur-[80px] pointer-events-none" />
+                                    <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4 relative z-10" />
+                                    <h2 className="text-2xl font-bold mb-2 relative z-10">Remove Team?</h2>
+                                    <p className="text-muted-foreground mb-8 relative z-10">Are you sure you want to remove this team from the tournament? They will be able to be re-invited to join again.</p>
+                                    <div className="flex gap-4 justify-center relative z-10">
+                                        <Button variant="outline" onClick={() => setTeamToRemove(null)} className="w-full bg-white/5 hover:bg-white/10">Cancel</Button>
+                                        <Button variant="destructive" onClick={executeRemoveTeam} className="w-full bg-red-500 hover:bg-red-600 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]">Remove Team</Button>
+                                    </div>
+                                </GlassCard>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
                 {/* Header Section */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                     <div>
@@ -373,11 +456,10 @@ const ManageTournamentPage = () => {
                                                     <Avatar className="w-12 h-12 border border-white/20"><AvatarImage src={team.logo_url} /><AvatarFallback className="bg-primary/20 text-primary">{team.name?.charAt(0)}</AvatarFallback></Avatar>
                                                     <div className="overflow-hidden">
                                                         <h4 className="font-bold text-lg truncate">{team.name}</h4>
-                                                        {/* Fixed UI rendering to just confirm registration status safely */}
                                                         <p className="text-xs text-muted-foreground truncate">Status: {team.status || 'Enrolled'}</p>
                                                     </div>
                                                 </div>
-                                                <Button size="icon" variant="ghost" className="text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => handleRemoveTeam(team.id, team.coach_id)}>
+                                                <Button size="icon" variant="ghost" className="text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => promptRemoveTeam(team.id, team.coach_id)}>
                                                     <X className="w-5 h-5" />
                                                 </Button>
                                             </div>
