@@ -2,56 +2,127 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import GlassCard from '@/components/glass/GlassCard'
 import { Button } from '@/components/ui/button'
-import { Bell, Check, X } from 'lucide-react'
+import { Bell, Check, X, Loader2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 const NotificationItem = ({ notification, onUpdate }: { notification: any, onUpdate: () => void }) => {
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleAccept = async () => {
+  // --- PLAYER ACCEPTING A TEAM INVITE ---
+  const handleTeamAccept = async () => {
+    setIsProcessing(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !notification.metadata?.team_invitation_id || !notification.metadata?.coach_id) return;
-
-    // 1. Update team_invitations
-    const { error: inviteError } = await supabase
-      .from('team_invitations')
-      .update({ status: 'accepted' })
-      .eq('id', notification.metadata.team_invitation_id);
-
-    // 2. Update player's coach_id
-    const { error: playerError } = await supabase
-      .from('players')
-      .update({ coach_id: notification.metadata.coach_id })
-      .eq('id', user.id);
-
-    // 3. Mark notification as read
-    const { error: notifError } = await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('id', notification.id);
-      
-    if (inviteError || playerError || notifError) {
-        console.error('Error accepting invite:', inviteError || playerError || notifError);
-    } else {
-        onUpdate();
+    if (!user || !notification.metadata?.team_invitation_id || !notification.metadata?.coach_id) {
+        setIsProcessing(false);
+        return;
     }
+
+    await supabase.from('team_invitations').update({ status: 'accepted' }).eq('id', notification.metadata.team_invitation_id);
+    await supabase.from('players').update({ coach_id: notification.metadata.coach_id }).eq('id', user.id);
+    await supabase.from('notifications').update({ is_read: true }).eq('id', notification.id);
+    
+    setIsProcessing(false);
+    onUpdate();
   };
 
-  const handleDecline = async () => {
-     const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', notification.id);
-     if(error) console.error('Error declining', error); 
-     else onUpdate();
+  const handleTeamDecline = async () => {
+    setIsProcessing(true);
+    await supabase.from('team_invitations').update({ status: 'rejected' }).eq('id', notification.metadata?.team_invitation_id);
+    await supabase.from('notifications').update({ is_read: true }).eq('id', notification.id);
+    setIsProcessing(false);
+    onUpdate();
+  };
+
+  // --- COACH ACCEPTING A TOURNAMENT INVITE ---
+  const handleTournamentAccept = async () => {
+    setIsProcessing(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !notification.metadata?.tournament_invite_id) {
+        setIsProcessing(false);
+        return;
+    }
+
+    // 1. Fetch coach's base team
+    const { data: coachData } = await supabase.from('coaches').select('team_name, team_logo').eq('id', user.id).single();
+    const { data: inviteData } = await supabase.from('tournament_invitations').select('tournament_id, organizer_id').eq('id', notification.metadata.tournament_invite_id).single();
+
+    if (coachData && inviteData) {
+        // 2. Create the team for the tournament
+        await supabase.from('teams').insert({
+            tournament_id: inviteData.tournament_id,
+            coach_id: user.id,
+            name: coachData.team_name || 'Unnamed Team',
+            logo_url: coachData.team_logo,
+            status: 'approved'
+        });
+
+        // 3. Update invite & Notify Organizer
+        await supabase.from('tournament_invitations').update({ status: 'accepted' }).eq('id', notification.metadata.tournament_invite_id);
+        const { data: profile } = await supabase.from('profiles').select('name').eq('id', user.id).single();
+        
+        await supabase.from('notifications').insert({
+            user_id: inviteData.organizer_id,
+            type: 'system',
+            message: `${profile?.name} accepted your invite to ${notification.metadata.tournament_name}!`
+        });
+    }
+
+    await supabase.from('notifications').update({ is_read: true }).eq('id', notification.id);
+    setIsProcessing(false);
+    onUpdate();
+  };
+
+  const handleTournamentDecline = async () => {
+     setIsProcessing(true);
+     await supabase.from('tournament_invitations').update({ status: 'rejected' }).eq('id', notification.metadata?.tournament_invite_id);
+     
+     // Notify Organizer
+     const { data: profile } = await supabase.from('profiles').select('name').eq('id', notification.user_id).single();
+     await supabase.from('notifications').insert({
+         user_id: notification.metadata.organizer_id,
+         type: 'system',
+         message: `${profile?.name} declined your invite to ${notification.metadata.tournament_name}.`
+     });
+
+     await supabase.from('notifications').update({ is_read: true }).eq('id', notification.id);
+     setIsProcessing(false);
+     onUpdate();
   };
 
   return (
-    <div className="p-3 border-b border-gray-700 hover:bg-gray-800 transition-colors">
-      <p className="text-sm text-gray-200 mb-2">{notification.message}</p>
+    <div className="p-4 border-b border-white/10 hover:bg-white/5 transition-colors">
+      <p className="text-sm text-foreground mb-3">{notification.message}</p>
+      
+      {/* Player Team Invite Controls */}
       {notification.type === 'team_invite' && (
-        <div className="flex gap-2 mt-2">
-          <Button size="sm" onClick={handleAccept}><Check className="w-3 h-3 mr-1"/> Accept</Button>
-          <Button size="sm" variant="outline" onClick={handleDecline}><X className="w-3 h-3 mr-1"/> Decline</Button>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={handleTeamAccept} disabled={isProcessing} className="bg-primary text-primary-foreground">
+            {isProcessing ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <Check className="w-3 h-3 mr-1"/>} Accept
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleTeamDecline} disabled={isProcessing} className="border-red-500/50 text-red-400 hover:bg-red-500/10">
+            <X className="w-3 h-3 mr-1"/> Decline
+          </Button>
         </div>
+      )}
+
+      {/* Coach Tournament Invite Controls */}
+      {notification.type === 'tournament_invite' && (
+        <div className="flex gap-2">
+          <Button size="sm" onClick={handleTournamentAccept} disabled={isProcessing} className="bg-primary text-primary-foreground">
+             {isProcessing ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <Check className="w-3 h-3 mr-1"/>} Join Tournament
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleTournamentDecline} disabled={isProcessing} className="border-red-500/50 text-red-400 hover:bg-red-500/10">
+            <X className="w-3 h-3 mr-1"/> Decline
+          </Button>
+        </div>
+      )}
+
+      {/* Standard System Notification (Just dismissible) */}
+      {notification.type === 'system' && (
+          <Button size="sm" variant="ghost" onClick={() => {
+              supabase.from('notifications').update({ is_read: true }).eq('id', notification.id).then(() => onUpdate());
+          }}>Dismiss</Button>
       )}
     </div>
   )
@@ -73,9 +144,7 @@ export const Notifications = () => {
         .eq('is_read', false)
         .order('created_at', { ascending: false });
 
-      if (error) {
-          console.error("Failed to fetch notifications", error);
-      } else {
+      if (!error) {
           setNotifications(data || []);
           setUnreadCount(count || 0);
       }
@@ -83,8 +152,9 @@ export const Notifications = () => {
 
   useEffect(() => {
     fetchNotifications();
-    const channel = supabase.channel('notifications')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, fetchNotifications)
+    const channel = supabase.channel('custom-all-channel')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, fetchNotifications)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications' }, fetchNotifications)
       .subscribe();
 
     return () => {
@@ -94,30 +164,34 @@ export const Notifications = () => {
 
   return (
     <div className="relative">
-      <button onClick={() => setIsOpen(!isOpen)} className="relative p-2 rounded-full hover:bg-gray-700 transition-colors">
-        <Bell className="text-gray-300 hover:text-white transition-colors" />
+      <button onClick={() => setIsOpen(!isOpen)} className="relative p-2 rounded-full hover:bg-white/10 transition-colors">
+        <Bell className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors" />
         {unreadCount > 0 && (
-          <div className="absolute top-0 right-0 w-4 h-4 bg-red-600 rounded-full text-xs flex items-center justify-center font-bold text-white">{unreadCount}</div>
+          <div className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full text-[10px] flex items-center justify-center font-bold text-white shadow-lg">{unreadCount}</div>
         )}
       </button>
       <AnimatePresence>
         {isOpen && (
           <motion.div 
-            initial={{ opacity: 0, y: -10 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute right-0 mt-2 w-80 z-20"
+            initial={{ opacity: 0, y: -10, scale: 0.95 }} 
+            animate={{ opacity: 1, y: 0, scale: 1 }} 
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="absolute right-0 mt-2 w-80 z-50"
           >
-            <div className="rounded-lg shadow-lg border border-gray-700 bg-gray-800/95 backdrop-blur-sm">
-                <div className="p-3 border-b border-gray-700">
-                    <h3 className="font-bold text-white">Notifications</h3>
+            <div className="rounded-xl shadow-2xl border border-white/10 bg-background/95 backdrop-blur-xl overflow-hidden">
+                <div className="p-4 border-b border-white/10 bg-white/5">
+                    <h3 className="font-bold text-foreground">Notifications</h3>
                 </div>
                 {notifications.length > 0 ? (
-                    <div className="max-h-96 overflow-y-auto">
+                    <div className="max-h-96 overflow-y-auto custom-scrollbar">
                         {notifications.map(n => <NotificationItem key={n.id} notification={n} onUpdate={fetchNotifications} />)}
                     </div>
                 ) : (
-                    <p className="p-4 text-center text-sm text-gray-400">No new notifications.</p>
+                    <div className="p-8 text-center">
+                        <Bell className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground">You're all caught up.</p>
+                    </div>
                 )}
             </div>
           </motion.div>

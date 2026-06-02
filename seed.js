@@ -9,7 +9,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-const SPORTS = ['cricket', 'football', 'badminton', 'wrestling', 'kabaddi'];
+const SPORTS = ['karate'];
 const BADGES = ['wooden', 'bronze', 'silver', 'gold', 'elite'];
 const CITIES = ['Mumbai', 'Delhi', 'Bangalore', 'Jaipur', 'Pune'];
 
@@ -76,4 +76,4 @@ async function seedUsers(count = 20) {
   console.log('🎉 Seeding complete! Your community is now populated.');
 }
 
-seedUsers(300); // Generates 30 users
+seedUsers(10); // Generates 30 users
