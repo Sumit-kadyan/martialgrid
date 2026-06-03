@@ -54,7 +54,7 @@ const TournamentCard = ({ tournament, teamCount, userRole }: { tournament: any, 
                 <Progress value={(teamCount / tournament.max_teams) * 100} />
                 <div className="mt-4 flex gap-2">
                     <Link href={manageLink} className="flex-1"><Button className="w-full">{userRole === 'organizer' ? 'Manage Event' : 'View Details'}</Button></Link>
-                    <Link href={`/t/${tournament.slug}/brackets`} className="flex-1"><Button variant="outline" className="w-full">View Brackets</Button></Link>
+                    <Link href={`/tournament/${tournament.id}/brackets`} className="flex-1"><Button variant="outline" className="w-full">View Brackets</Button></Link>
                 </div>
             </div>
         </GlassCard>

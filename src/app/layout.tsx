@@ -5,7 +5,7 @@ import LiquidBackground from '@/components/layout/LiquidBackground';
 
 export const metadata: Metadata = {
   title: 'Martial Grid | Elite Tournament Management',
-  description: 'Next-gen multi-sport tournament management with liquid analytics and smart seeding.',
+  description: 'Next-gen multi-sport tournament management.',
 };
 
 export default function RootLayout({

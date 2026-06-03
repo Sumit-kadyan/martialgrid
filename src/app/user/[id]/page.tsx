@@ -7,13 +7,18 @@ import GlassCard from '@/components/glass/GlassCard';
 import GlassButton from '@/components/glass/GlassButton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion } from 'framer-motion';
-import { MapPin, User, Award, Shield, Mail, UserPlus, Clock } from 'lucide-react';
-import { notFound } from 'next/navigation';
+// Added ArrowLeft for the back button
+import { MapPin, User, Award, Shield, Mail, UserPlus, Clock, ArrowLeft } from 'lucide-react'; 
+// Added useRouter hook
+import { notFound, useRouter } from 'next/navigation'; 
 
 // Next.js 15 requires params to be a Promise
 export default function UserProfilePage({ params }: { params: Promise<{ id: string }> }) {
   // 1. Properly unwrap the params using React.use()
   const { id } = use(params);
+  
+  // Initialize the Next.js router for the back navigation
+  const router = useRouter();
 
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
@@ -90,8 +95,25 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
 
   return (
     <DashboardLayout>
-      <div className="p-4 sm:p-8 max-w-4xl mx-auto">
+      {/* Added 'relative' to this wrapper so the absolute back button anchors here */}
+      <div className="p-4 sm:p-8 max-w-4xl mx-auto relative mt-8 md:mt-4">
         
+        {/* MINIMAL FLOATING BACK BUTTON */}
+        <motion.div 
+          initial={{ opacity: 0, x: -10 }} 
+          animate={{ opacity: 1, x: 0 }} 
+          transition={{ duration: 0.3 }}
+          className="absolute -top-12 left-4 sm:-left-4 md:-left-12 z-20"
+        >
+          <GlassButton 
+            onClick={() => router.back()}
+            className="p-2 sm:p-3 rounded-full bg-white/5 hover:bg-white/10 border-white/10 text-muted-foreground hover:text-foreground shadow-lg transition-all"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </GlassButton>
+        </motion.div>
+
         {/* HERO SECTION */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
           <GlassCard className="relative p-8 md:p-12 flex flex-col md:flex-row items-center md:items-start gap-8 overflow-hidden mb-8 border border-white/10 shadow-2xl">

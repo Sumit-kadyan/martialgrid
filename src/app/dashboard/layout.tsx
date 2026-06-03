@@ -108,9 +108,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const navItems = [
     { name: 'Overview', href: '/dashboard/overview', icon: LayoutDashboard },
-    { name: 'Community', href: '/community', icon: Globe },
+    { name: 'Community', href: '/dashboard/community', icon: Globe },
     { name: 'Tournaments', href: '/dashboard/tournaments', icon: Trophy },
-    { name: 'Smart Seeding', href: '/dashboard/seeding', icon: BrainCircuit },
     { name: 'Live Pulse', href: '/dashboard/pulse', icon: Activity },
     { name: 'Teams', href: '/dashboard/teams', icon: Users },
   ]
