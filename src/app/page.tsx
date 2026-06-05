@@ -271,7 +271,7 @@ export default function LandingPage() {
               <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
                 <Trophy className="w-5 h-5 text-white" />
               </div>
-              <span className="font-headline font-bold text-xl tracking-tight text-slate-900">TOURNEY HUB</span>
+              <span className="font-headline font-bold text-xl tracking-tight text-slate-900">MARTIAL GRID</span>
             </div>
             
             <div className="flex gap-6 text-sm text-slate-500 font-medium">
@@ -281,7 +281,7 @@ export default function LandingPage() {
               <span className="cursor-not-allowed">Terms</span>
             </div>
             
-            <p className="text-xs text-slate-400">© 2026 Tourney Hub. All rights reserved.</p>
+            <p className="text-xs text-slate-400">© 2026 Martial Grid. All rights reserved.</p>
           </div>
         </footer>
 

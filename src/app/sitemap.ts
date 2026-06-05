@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next';
 import { supabase } from '@/lib/supabaseClient';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = 'https://tourneyhub.com'; // Replace with your domain
+  const baseUrl = 'https://martialgrid.com'; // Replace with your domain
 
   // 1. Static Routes
   const staticRoutes = [

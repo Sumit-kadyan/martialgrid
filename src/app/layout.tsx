@@ -4,25 +4,25 @@ import LiquidBackground from '@/components/layout/LiquidBackground';
 
 // Elite-Level Global SEO Configuration
 export const metadata: Metadata = {
-  metadataBase: new URL('https://tourneyhub.com'), // Replace with your actual domain
+  metadataBase: new URL('https://martialgrid.com'), // Replace with your actual domain
   title: {
-    default: 'Tourney Hub | Elite Tournament Management Software',
-    template: '%s | Tourney Hub',
+    default: 'Martial Grid | Elite Tournament Management Software',
+    template: '%s | Martial Grid',
   },
   description: 'The ultimate multi-sport tournament management ecosystem. Launch events, manage squads, and broadcast live telemetry to thousands of fans.',
   keywords: ['tournament management', 'bracket generator', 'sports tech', 'live match scoring', 'cricket tournament software', 'football league manager'],
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://tourneyhub.com',
-    siteName: 'Tourney Hub',
-    title: 'Tourney Hub | Play By New Rules',
+    url: 'https://martialgrid.com',
+    siteName: 'Martial Grid',
+    title: 'Martial Grid | Play By New Rules',
     description: 'Stop playing by the old rules. Scale your sports events with auto-brackets and live pulse telemetry.',
-    images: [{ url: '/og-image.jpg', width: 1200, height: 630, alt: 'Tourney Hub Dashboard' }],
+    images: [{ url: '/og-image.jpg', width: 1200, height: 630, alt: 'Martial Grid Dashboard' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Tourney Hub | Elite Tournament Management',
+    title: 'Martial Grid | Elite Tournament Management',
     description: 'Scale your sports events with auto-brackets and live pulse telemetry.',
     images: ['/og-image.jpg'], // Ensure you add a high-res image at public/og-image.jpg
   },
@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
-    name: 'Tourney Hub',
+    name: 'Martial Grid',
     applicationCategory: 'SportsApplication',
     operatingSystem: 'Web',
     offers: {
@@ -49,7 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     description: 'Next-gen multi-sport tournament management and live scoring platform.',
     publisher: {
       '@type': 'Organization',
-      name: 'Tourney Hub Inc.',
+      name: 'Martial Grid Inc.',
     }
   };
 

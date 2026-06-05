@@ -13,7 +13,7 @@ export default function LoginPage() {
         <Link href="/" className="flex items-center gap-2 transition-transform hover:scale-105 active:scale-95">
           <img 
             src="/logo.webp" 
-            alt="Tourney Hub Logo" 
+            alt="Martial Grid Logo" 
             className="h-16 w-auto object-contain" 
           />
         </Link>

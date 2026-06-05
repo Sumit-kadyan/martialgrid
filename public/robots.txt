@@ -9,4 +9,4 @@ Disallow: /api/
 Disallow: /*?* # Block URLs with heavy query parameters to prevent crawler traps
 
 # Point to the dynamically generated sitemap
-Sitemap: https://tourneyhub.com/sitemap.xml
+Sitemap: https://martialgrid/sitemap.xml
