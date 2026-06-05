@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import DashboardLayout from '@/app/dashboard/layout';
@@ -27,6 +27,8 @@ const MatchScoringPage = () => {
 
     // Dynamic Score State
     const [scoreData, setScoreData] = useState<Record<string, any>>({});
+    // Use a ref to track the absolute latest state to prevent rapid-tap race conditions
+    const scoreDataRef = useRef<Record<string, any>>({});
 
     // Timer State
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
@@ -36,7 +38,41 @@ const MatchScoringPage = () => {
     const [editSecs, setEditSecs] = useState("");
 
     useEffect(() => {
+        scoreDataRef.current = scoreData;
+    }, [scoreData]);
+
+    useEffect(() => {
         fetchMatchData();
+
+        // REALTIME SYNC: Keep multiple scoring iPads perfectly in sync
+        const channel = supabase.channel(`match-control-${matchId}`)
+            .on('postgres_changes', { 
+                event: 'UPDATE', 
+                schema: 'public', 
+                table: 'matches', 
+                filter: `id=eq.${matchId}` 
+            }, (payload) => {
+                // Only update if we aren't the ones currently pushing an update
+                if (payload.new.score_data) {
+                   setScoreData(payload.new.score_data);
+                }
+                if (payload.new.status) {
+                    setMatch(prev => ({...prev, status: payload.new.status}));
+                }
+            })
+            .on('postgres_changes', { 
+                event: 'INSERT', 
+                schema: 'public', 
+                table: 'match_events', 
+                filter: `match_id=eq.${matchId}` 
+            }, (payload) => {
+                setEvents(prev => [payload.new, ...prev]);
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, [matchId]);
 
     const fetchMatchData = async () => {
@@ -45,14 +81,12 @@ const MatchScoringPage = () => {
         const { data: { user } } = await supabase.auth.getUser();
         setCurrentUserId(user?.id || null);
 
-        // Fetch basic match details
         const { data: matchData } = await supabase
             .from('match_details')
             .select('*')
             .eq('id', matchId)
             .single();
             
-        // FIX: Directly fetch the score_data from the raw matches table to prevent View errors
         const { data: rawMatch, error: rawError } = await supabase
             .from('matches')
             .select('score_data, status')
@@ -64,13 +98,13 @@ const MatchScoringPage = () => {
         if (matchData) {
             setMatch({ ...matchData, status: rawMatch?.status || matchData.status });
             
-            // Safe JSONB Initialization including Warnings, using the raw table data
             const initialScores = rawMatch?.score_data || matchData.score_data || {};
             if (!initialScores[matchData.team_a_id]) initialScores[matchData.team_a_id] = { score: 0, secondary: 0, tertiary: 0, warnings: 0 };
             if (!initialScores[matchData.team_b_id]) initialScores[matchData.team_b_id] = { score: 0, secondary: 0, tertiary: 0, warnings: 0 };
+            
             setScoreData(initialScores);
 
-            const { data: tourneyData } = await supabase.from('tournaments').select('sport, name, rules, organizer_id').eq('id', matchData.tournament_id).single();
+            const { data: tourneyData } = await supabase.from('tournaments').select('id, sport, name, rules, organizer_id').eq('id', matchData.tournament_id).single();
             if (tourneyData) setTournament(tourneyData);
 
             const { data: eventData } = await supabase
@@ -84,8 +118,6 @@ const MatchScoringPage = () => {
     };
 
     const isOrganizer = currentUserId === tournament?.organizer_id;
-
-    // --- TIMER ENGINE WITH AUTO-COMPLETION ---
     const sport = tournament?.sport?.toLowerCase() || '';
     const needsTimer = ['football', 'basketball', 'wrestling', 'kabaddi', 'karate', 'judo'].includes(sport);
 
@@ -104,21 +136,14 @@ const MatchScoringPage = () => {
                 setTimeLeft((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
             }, 1000);
         } else if (isTimerRunning && timeLeft === 0) {
-            // BUZZER BEATER AUTO-WIN ENGINE
+            // FIX: Removed Auto-Complete Navigation. It just pauses and alerts now.
             setIsTimerRunning(false);
             setTimeout(() => {
-                const scoreA = scoreData[match.team_a_id]?.score || 0;
-                const scoreB = scoreData[match.team_b_id]?.score || 0;
-                let winnerText = "It's a tie!";
-                if (scoreA > scoreB) winnerText = `${match.team_a_name} wins with ${scoreA} points!`;
-                else if (scoreB > scoreA) winnerText = `${match.team_b_name} wins with ${scoreB} points!`;
-
-                alert(`⏰ TIME IS UP! ${winnerText} The match is now complete.`);
-                handleCompleteMatch(true); // Auto-finalize
+                alert(`⏰ TIME IS UP! The clock has hit zero. Please review the scores and finalize the match manually.`);
             }, 500);
         }
         return () => clearInterval(interval);
-    }, [isTimerRunning, timeLeft, scoreData, match]);
+    }, [isTimerRunning, timeLeft]);
 
     const formatTime = (seconds: number) => {
         const m = Math.floor(seconds / 60);
@@ -158,7 +183,7 @@ const MatchScoringPage = () => {
         setIsEditingTime(false);
     };
 
-    // --- UNIVERSAL SCORING & WARNING ENGINE ---
+    // --- UNIVERSAL SCORING & WARNING ENGINE (Fixed Race Conditions) ---
     const handleScoreUpdate = async (
         teamId: string, 
         teamName: string, 
@@ -169,7 +194,9 @@ const MatchScoringPage = () => {
 
         setIsUpdating(true);
 
-        const currentTeamData = scoreData[teamId] || { score: 0, secondary: 0, tertiary: 0, warnings: 0 };
+        // FIX: Always calculate off the ref to prevent rapid-tap overwrites
+        const latestData = scoreDataRef.current;
+        const currentTeamData = latestData[teamId] || { score: 0, secondary: 0, tertiary: 0, warnings: 0 };
         
         const newTeamData = {
             score: (currentTeamData.score || 0) + (deltas.score || 0),
@@ -178,7 +205,7 @@ const MatchScoringPage = () => {
             warnings: (currentTeamData.warnings || 0) + (deltas.warnings || 0),
         };
 
-        const updatedScoreData = { ...scoreData, [teamId]: newTeamData };
+        const updatedScoreData = { ...latestData, [teamId]: newTeamData };
         setScoreData(updatedScoreData);
 
         const newEvent = {
@@ -188,9 +215,10 @@ const MatchScoringPage = () => {
             event_data: { team_id: teamId, team_name: teamName, deltas, match_time: timeLeft !== null ? formatTime(timeLeft) : null },
             created_at: new Date().toISOString()
         };
+
+        // We optimistically update the events array, the realtime channel will catch the real DB insert
         setEvents(prev => [newEvent, ...prev]);
 
-        // Check for backend errors so they show up in the console clearly
         const [updateRes, insertRes] = await Promise.all([
             supabase.from('matches').update({ score_data: updatedScoreData }).eq('id', matchId),
             supabase.from('match_events').insert({
@@ -200,15 +228,18 @@ const MatchScoringPage = () => {
             })
         ]);
 
-        if (updateRes.error) console.error("FAILED TO SAVE SCORE:", updateRes.error);
+        if (updateRes.error) {
+            console.error("FAILED TO SAVE SCORE:", updateRes.error);
+            alert("Network Error: Failed to save score. Please check your connection.");
+        }
 
         setIsUpdating(false);
 
-        // DISQUALIFICATION ENGINE (5 Warnings)
+        // DISQUALIFICATION ENGINE (5 Warnings) - Removed auto-navigate
         if (newTeamData.warnings >= 5 && match.status !== 'completed') {
             setTimeout(() => {
-                alert(`🚨 DISQUALIFICATION: ${teamName} has received 5 warnings! The match is over.`);
-                handleCompleteMatch(true); // Auto-finalize
+                alert(`🚨 DISQUALIFICATION: ${teamName} has received 5 warnings! Please finalize the match.`);
+                setIsTimerRunning(false);
             }, 500);
         }
     };
@@ -226,10 +257,17 @@ const MatchScoringPage = () => {
         setIsUpdating(false);
 
         if (!error) {
-            // FIX 404 ERROR: Send them to the correct dashboard URL
-            router.push(`/organizer/manage-tournament/${match?.tournament_id}`);
+            setMatch(prev => ({...prev, status: 'completed'}));
+            alert("Match Finalized!");
+            // FIX: Null check routing
+            if (tournament?.id) {
+                router.push(`/organizer/manage-tournament/${tournament.id}`);
+            } else {
+                router.push(`/dashboard/overview`);
+            }
         } else {
             console.error("Failed to complete match:", error);
+            alert("Error finalizing match.");
         }
     };
 
@@ -354,7 +392,6 @@ const MatchScoringPage = () => {
             }
         })();
 
-        // Append the universal Yellow Warning button below the sport controls
         return (
             <div>
                 {sportSpecificControls}
@@ -381,8 +418,13 @@ const MatchScoringPage = () => {
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div>
-                        {/* FIX 404 ERROR: Corrected URL for the back button */}
-                        <Button variant="ghost" onClick={() => router.push(`/organizer/manage-tournament/${match?.tournament_id}`)} className="mb-2 -ml-4 text-muted-foreground hover:text-foreground">
+                        <Button variant="ghost" onClick={() => {
+                            if (tournament?.id) {
+                                router.push(`/organizer/manage-tournament/${tournament.id}`);
+                            } else {
+                                router.push('/dashboard/overview');
+                            }
+                        }} className="mb-2 -ml-4 text-muted-foreground hover:text-foreground">
                             <ChevronLeft className="w-4 h-4 mr-1" /> Back to Dashboard
                         </Button>
                         <div className="flex items-center gap-3 mb-1">
@@ -455,7 +497,7 @@ const MatchScoringPage = () => {
                                         </div>
                                     )}
 
-                                    {!isEditingTime && isOrganizer && (
+                                    {!isEditingTime && isOrganizer && match.status !== 'completed' && (
                                         <div className="flex gap-2 mt-4 flex-wrap justify-center">
                                             <Button 
                                                 size="sm" 

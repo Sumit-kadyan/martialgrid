@@ -7,12 +7,14 @@ import DashboardLayout from '@/app/dashboard/layout';
 import GlassCard from '@/components/glass/GlassCard';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { MapPin, Loader2, Calendar, Users, Share2, Trophy, Clock, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { MapPin, Loader2, Calendar, Users, Share2, Trophy, Clock, CheckCircle2, ShieldCheck, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useToast } from '@/hooks/use-toast'; // Importing your toast hook
 
 const PublicTournamentPage = () => {
     const params = useParams();
     const tournamentId = params.id as string;
+    const { toast } = useToast();
     
     const [tournament, setTournament] = useState<any>(null);
     const [teams, setTeams] = useState<any[]>([]);
@@ -20,6 +22,7 @@ const PublicTournamentPage = () => {
     const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0 });
     const [hasApplied, setHasApplied] = useState(false);
     const [currentUser, setCurrentUser] = useState<any>(null);
+    const [isCopied, setIsCopied] = useState(false); // New state for Share button feedback
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -35,7 +38,7 @@ const PublicTournamentPage = () => {
             
             if (tData) setTournament(tData);
 
-            // Fetch Approved Teams (if any exist yet)
+            // Fetch Approved Teams
             const { data: teamsData } = await supabase
                 .from('teams')
                 .select('id, name, logo_url')
@@ -65,7 +68,6 @@ const PublicTournamentPage = () => {
     useEffect(() => {
         if (!tournament) return;
 
-        // If announcement, countdown to registration deadline. Otherwise, countdown to start date.
         const targetDate = new Date(
             tournament.registration_mode === 'announcement' && tournament.registration_deadline 
                 ? tournament.registration_deadline 
@@ -91,8 +93,11 @@ const PublicTournamentPage = () => {
         return () => clearInterval(interval);
     }, [tournament]);
 
+    // --- ALIVE SHARE BUTTON LOGIC ---
     const handleShare = async () => {
         const url = window.location.href;
+        
+        // 1. Try Native Web Share API (mostly mobile devices)
         if (navigator.share) {
             try {
                 await navigator.share({
@@ -100,24 +105,62 @@ const PublicTournamentPage = () => {
                     text: `Check out ${tournament?.name} on our platform!`,
                     url: url,
                 });
+                return; // Exit if successfully shared natively
             } catch (error) {
-                console.log('Error sharing', error);
+                console.log('Native share failed or aborted, falling back to copy.', error);
             }
-        } else {
-            navigator.clipboard.writeText(url);
-            alert("Link copied to clipboard!");
+        } 
+        
+        // 2. Fallback to Clipboard (Desktop)
+        try {
+            await navigator.clipboard.writeText(url);
+            setIsCopied(true);
+            toast({
+                title: "Link Copied!",
+                description: "Tournament URL saved to clipboard.",
+            });
+            
+            // Revert icon back to share after 2 seconds
+            setTimeout(() => {
+                setIsCopied(false);
+            }, 2000);
+        } catch (err) {
+            toast({
+                title: "Failed to copy",
+                description: "Please copy the URL manually from your browser.",
+                variant: "destructive",
+            });
         }
     };
 
     const handleApply = async () => {
-        if (!currentUser) return alert("Please log in to apply.");
+        if (!currentUser) {
+            toast({
+                title: "Login Required",
+                description: "Please log in to apply for this tournament.",
+                variant: "destructive"
+            });
+            return;
+        }
         
         const { error } = await supabase.from('tournament_applications').insert({
             tournament_id: tournamentId,
             applicant_id: currentUser.id
         });
 
-        if (!error) setHasApplied(true);
+        if (!error) {
+            setHasApplied(true);
+            toast({
+                title: "Application Sent!",
+                description: "The organizer has received your request.",
+            });
+        } else {
+            toast({
+                title: "Error",
+                description: "Failed to send application. Try again.",
+                variant: "destructive"
+            });
+        }
     };
 
     if (loading) return <DashboardLayout><div className="flex justify-center items-center h-screen"><Loader2 className="w-12 h-12 animate-spin text-primary" /></div></DashboardLayout>;
@@ -152,8 +195,13 @@ const PublicTournamentPage = () => {
                     </div>
                     
                     <div className="flex gap-4 w-full md:w-auto">
-                        <Button variant="outline" className="bg-background/50 backdrop-blur-md" onClick={handleShare}>
-                            <Share2 className="w-5 h-5 mr-2" /> Share
+                        <Button 
+                            variant="outline" 
+                            className={`bg-background/50 backdrop-blur-md transition-all ${isCopied ? 'border-green-500/50 text-green-400' : ''}`} 
+                            onClick={handleShare}
+                        >
+                            {isCopied ? <Check className="w-5 h-5 mr-2 text-green-400" /> : <Share2 className="w-5 h-5 mr-2" />} 
+                            {isCopied ? 'Copied!' : 'Share'}
                         </Button>
                         
                         {isOpen && (

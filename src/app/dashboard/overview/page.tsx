@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import GlassCard from '@/components/glass/GlassCard';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Plus, BarChart2, Shield, Users, ArrowRight, Trophy, Search } from 'lucide-react';
+import { Plus, BarChart2, Shield, Settings, Users, ArrowRight, Trophy, Search } from 'lucide-react';
 import Link from 'next/link';
 
 // Common Components
@@ -53,8 +53,16 @@ const TournamentCard = ({ tournament, teamCount, userRole }: { tournament: any, 
                 </div>
                 <Progress value={(teamCount / tournament.max_teams) * 100} />
                 <div className="mt-4 flex gap-2">
-                    <Link href={manageLink} className="flex-1"><Button className="w-full">{userRole === 'organizer' ? 'Manage Event' : 'View Details'}</Button></Link>
-                    <Link href={`/tournament/${tournament.id}/brackets`} className="flex-1"><Button variant="outline" className="w-full">View Brackets</Button></Link>
+                    <Link href={manageLink} className="shrink-0">
+        <Button size="icon" className="w-10 h-10">
+            <Settings className="w-5 h-5" />
+        </Button>
+                    </Link>
+                    <Link href={`/tournament/${tournament.id}/brackets`} className="flex-1">
+                        <Button variant="outline" className="w-full">
+                            View Brackets
+                        </Button>
+                    </Link>
                 </div>
             </div>
         </GlassCard>

@@ -18,7 +18,7 @@ const CommunityPage = () => {
   const [results, setResults] = useState<any>({ players: [], coaches: [], tournaments: [] });
   const [loading, setLoading] = useState(true);
   
-  // New state for organizers
+  // State for organizers and fans
   const [sports, setSports] = useState<string[]>([]);
   const [selectedSport, setSelectedSport] = useState<string>('');
 
@@ -34,7 +34,8 @@ const CommunityPage = () => {
       
       setUserProfile(profile);
 
-      if (profile.role === 'organizer') {
+      // Fans and Organizers get to see ALL sports via the dropdown
+      if (profile.role === 'organizer' || profile.role === 'fan') {
         const { data: sportsData } = await supabase.from('tournaments').select('sport');
         const uniqueSports = [...new Set(sportsData?.map(t => t.sport).filter(Boolean) || [])];
         setSports(uniqueSports);
@@ -44,6 +45,7 @@ const CommunityPage = () => {
           setLoading(false);
         }
       } else {
+        // Players and Coaches are locked to their specific sport
         let userSport = null;
         if (profile.role === 'player') {
           const { data: pData } = await supabase.from('players').select('sport').eq('id', user.id).single();
@@ -69,7 +71,7 @@ const CommunityPage = () => {
     const fetchCommunityData = async () => {
       if (!selectedSport) {
         setResults({ players: [], coaches: [], tournaments: [] });
-        if (userProfile && userProfile.role !== 'organizer') setLoading(false);
+        if (userProfile && userProfile.role !== 'organizer' && userProfile.role !== 'fan') setLoading(false);
         return;
       }
       
@@ -146,7 +148,9 @@ const CommunityPage = () => {
 
   const finalResults = getFilteredAndSortedResults();
   const hasResults = finalResults.players.length > 0 || finalResults.coaches.length > 0 || finalResults.tournaments.length > 0;
-  const noSportSelected = userProfile?.role === 'organizer' && !selectedSport;
+  
+  // Update logic to trigger empty state for both organizers and fans if no sport is selected
+  const noSportSelected = (userProfile?.role === 'organizer' || userProfile?.role === 'fan') && !selectedSport;
 
   return (
     <div className="p-4 sm:p-8 max-w-7xl mx-auto">
@@ -169,7 +173,8 @@ const CommunityPage = () => {
           />
         </div>
 
-        {userProfile?.role === 'organizer' && sports.length > 0 && (
+        {/* Render dropdown for both organizers and fans */}
+        {(userProfile?.role === 'organizer' || userProfile?.role === 'fan') && sports.length > 0 && (
           <div className="flex-none w-full md:w-48">
             <Select value={selectedSport} onValueChange={setSelectedSport}>
               <SelectTrigger className="h-12 text-base bg-white/5 border-white/10 focus-visible:ring-primary">
@@ -206,7 +211,7 @@ const CommunityPage = () => {
       ) : noSportSelected ? (
             <div className="col-span-full py-24 flex flex-col items-center justify-center text-center">
               <h2 className="text-3xl font-bold mb-2">Select a Sport</h2>
-              <p className="text-muted-foreground max-w-md">As an organizer, you can view the community for any sport. Please select one from the filter above to begin.</p>
+              <p className="text-muted-foreground max-w-md">As an organizer or fan, you can view the community for any sport. Please select one from the filter above to begin.</p>
           </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

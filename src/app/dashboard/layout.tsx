@@ -1,7 +1,7 @@
 'use client'
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { 
@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Loader2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -22,40 +23,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button'
 import { Notifications } from "@/components/Notifications"
 
-// UserProfileNav Component (Unchanged, included for completeness)
-const UserProfileNav = () => {
-  const [session, setSession] = useState<any>(null)
-  const [profile, setProfile] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const getSessionAndProfile = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setSession(session)
-
-      if (session) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-        setProfile(profileData)
-      }
-      setLoading(false)
-    }
-
-    getSessionAndProfile()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      if (!session) {
-        window.location.href = '/login'
-      }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
+// --- USER PROFILE NAV (Now receives data as props) ---
+const UserProfileNav = ({ profile, loading }: { profile: any, loading: boolean }) => {
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     window.location.href = '/'
@@ -67,7 +36,7 @@ const UserProfileNav = () => {
   }
 
   if (loading) {
-    return <div className="w-10 h-10 rounded-full bg-gray-500/30 animate-pulse"></div>
+    return <div className="w-10 h-10 rounded-full bg-black/10 animate-pulse"></div>
   }
 
   return (
@@ -75,27 +44,27 @@ const UserProfileNav = () => {
         <Notifications />
         <Popover>
         <PopoverTrigger asChild>
-            <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
-            <Avatar>
+            <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-transform hover:scale-105">
+            <Avatar className="border border-black/10 shadow-sm">
                 <AvatarImage src={profile?.avatar_url} alt={profile?.name} />
-                <AvatarFallback>{getInitials(profile?.name || 'User')}</AvatarFallback>
+                <AvatarFallback className="bg-primary/10 text-primary font-bold">{getInitials(profile?.name || 'User')}</AvatarFallback>
             </Avatar>
             </button>
         </PopoverTrigger>
         <PopoverContent className="w-64 p-2" align="end">
-            <div className="p-2 mb-2 border-b border-black/5">
-            <p className="font-bold text-sm truncate">{profile?.name}</p>
-            <p className="text-xs text-muted-foreground capitalize">{profile?.role}</p>
+            <div className="p-3 mb-2 border-b border-black/5 bg-black/5 rounded-t-md">
+              <p className="font-bold text-sm truncate">{profile?.name || 'Loading...'}</p>
+              <p className="text-[10px] uppercase tracking-widest text-primary font-bold mt-0.5">{profile?.role || 'User'}</p>
             </div>
             <Link href="/profile">
-            <Button variant="ghost" className="w-full justify-start font-normal">My Profile</Button>
+              <Button variant="ghost" className="w-full justify-start font-normal">My Profile</Button>
             </Link>
             <Link href="/dashboard/settings">
-            <Button variant="ghost" className="w-full justify-start font-normal">Settings</Button>
+              <Button variant="ghost" className="w-full justify-start font-normal">Settings</Button>
             </Link>
-            <Button variant="ghost" onClick={handleSignOut} className="w-full justify-start font-normal text-red-500 hover:text-red-600">
-            <LogOut className="w-4 h-4 mr-2" />
-            Logout
+            <Button variant="ghost" onClick={handleSignOut} className="w-full justify-start font-normal text-red-500 hover:text-red-600 hover:bg-red-50">
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
             </Button>
         </PopoverContent>
         </Popover>
@@ -103,13 +72,52 @@ const UserProfileNav = () => {
   )
 }
 
-
+// --- MAIN DASHBOARD LAYOUT ---
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
   
-  // State for Mobile Drawer and Desktop Collapse
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
+  
+  // Lifted Auth State
+  const [profile, setProfile] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  // 1. Fetch User & Role for RBAC (Role-Based Access Control)
+  useEffect(() => {
+    const checkAuthAndRole = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        window.location.href = '/login'
+        return
+      }
+
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single()
+      
+      setProfile(profileData)
+
+      // 🚨 SECURITY REDIRECT: If a Fan tries to load the Organizer Overview, bounce them to Pulse.
+      if (profileData?.role === 'fan' && pathname === '/dashboard/overview') {
+        router.replace('/dashboard/pulse')
+      } else {
+        setLoading(false)
+      }
+    }
+
+    checkAuthAndRole()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) window.location.href = '/login'
+    })
+
+    return () => subscription.unsubscribe()
+  }, [pathname, router])
 
   // Close mobile sidebar when route changes
   useEffect(() => {
@@ -126,13 +134,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => { document.body.style.overflow = 'unset' }
   }, [isMobileOpen])
 
+  // 2. Dynamic Navigation Array
   const navItems = [
-    { name: 'Overview', href: '/dashboard/overview', icon: LayoutDashboard },
-    { name: 'Community', href: '/dashboard/community', icon: Globe },
-    { name: 'Tournaments', href: '/dashboard/tournaments', icon: Trophy },
+    // The hideFor property allows us to dynamically remove this from the Fan's sidebar
+    { name: 'Overview', href: '/dashboard/overview', icon: LayoutDashboard, hideFor: ['fan'] },
     { name: 'Live Pulse', href: '/dashboard/pulse', icon: Activity },
+    { name: 'Tournaments', href: '/dashboard/tournaments', icon: Trophy },
     { name: 'Teams', href: '/dashboard/teams', icon: Users },
+    { name: 'Community', href: '/dashboard/community', icon: Globe },
   ]
+
+  // Filter out items the current user role shouldn't see
+  const filteredNavItems = navItems.filter(item => !item.hideFor?.includes(profile?.role))
+
+  // Block rendering until we know their role to prevent layout flashes
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-primary animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -149,9 +171,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside 
         className={cn(
           "fixed h-screen z-50 border-r border-black/5 glass-surface flex flex-col transition-all duration-300 ease-in-out bg-white/80 backdrop-blur-xl",
-          // Mobile positioning
           isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
-          // Desktop collapsing width
           isCollapsed ? "md:w-20" : "w-64"
         )}
       >
@@ -168,7 +188,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Link href="/" className="flex items-center justify-center">
             <img 
               src={isCollapsed ? "/icon.png" : "/logo.webp"} 
-              alt="Martial Grid Logo" 
+              alt="Platform Logo" 
               className={cn("transition-all duration-300 object-contain", isCollapsed ? "h-10 w-10" : "h-20 w-auto")} 
             />
           </Link>
@@ -184,14 +204,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Navigation Links */}
         <nav className="flex-1 space-y-2 px-4 overflow-y-auto overflow-x-hidden no-scrollbar">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const Icon = item.icon
             const isActive = pathname.startsWith(item.href)
             return (
               <Link
                 key={item.name}
                 href={item.href}
-                title={isCollapsed ? item.name : undefined} // Tooltip for collapsed state
+                title={isCollapsed ? item.name : undefined} 
                 className={cn(
                   "flex items-center rounded-xl text-sm font-medium transition-all group overflow-hidden",
                   isCollapsed ? "justify-center p-3" : "gap-3 px-4 py-3",
@@ -202,7 +222,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               >
                 <Icon className={cn("w-5 h-5 shrink-0 transition-colors", isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground")} />
                 
-                {/* Text wrapped in span to manage visibility and layout smoothly */}
                 <span className={cn(
                   "whitespace-nowrap transition-all duration-300",
                   isCollapsed ? "opacity-0 w-0 translate-x-10 hidden" : "opacity-100 w-auto translate-x-0 block"
@@ -232,11 +251,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Menu className="w-6 h-6" />
             </button>
             <h1 className="text-base sm:text-lg font-headline font-bold text-foreground uppercase tracking-widest line-clamp-1">
-              Command Center
+              {profile?.role === 'fan' ? 'Fan Zone' : 'Command Center'}
             </h1>
           </div>
           
-          <UserProfileNav />
+          {/* We pass the fetched profile and loading state directly to the Nav */}
+          <UserProfileNav profile={profile} loading={loading} />
         </header>
 
         <div className="p-4 sm:p-8">
