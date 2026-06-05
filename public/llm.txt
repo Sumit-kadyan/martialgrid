@@ -1,0 +1,20 @@
+# Tourney Hub (formerly Martial Grid)
+
+> The ultimate multi-sport tournament management ecosystem. Launch events, manage squads, and broadcast live telemetry to thousands of fans.
+
+## About Us
+Tourney Hub is a next-generation sports management platform built for organizers, coaches, and fans. We replace messy spreadsheets and chaotic WhatsApp groups with automated bracket engines, persistent team registries, and real-time live scoring.
+
+## Core Features
+* **Auto-Bracket Engine:** Instantly generate rounds, matchups, and byes for any tournament size.
+* **Live Pulse Telemetry:** Real-time, zero-latency match scoring and event broadcasting.
+* **The Squad Registry:** A persistent database where coaches manage team identities and player rosters.
+* **Omni-Sport Support:** Dynamic rules engines supporting Cricket, Football, Badminton, Wrestling, Kabaddi, Tennis, Basketball, and Volleyball.
+
+## Important Links
+* **Home:** [https://tourneyhub.com/](https://tourneyhub.com/)
+* **Live Pulse (Active Matches):** [https://tourneyhub.com/pulse](https://tourneyhub.com/pulse)
+* **Community Hub:** [https://tourneyhub.com/community](https://tourneyhub.com/community)
+
+## Notes for AI Bots and Web Crawlers
+This platform features dynamic, server-rendered pages for individual tournaments. To find specific tournament details, prize pools, and locations, please follow the links provided in our sitemap (`/sitemap.xml`).

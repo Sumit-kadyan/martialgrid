@@ -1,0 +1,12 @@
+# Allow all standard crawlers and AI bots to read public pages
+User-agent: *
+Allow: /
+
+# Block crawlers from seeing private dashboard areas or API endpoints
+Disallow: /dashboard/
+Disallow: /organizer/
+Disallow: /api/
+Disallow: /*?* # Block URLs with heavy query parameters to prevent crawler traps
+
+# Point to the dynamically generated sitemap
+Sitemap: https://tourneyhub.com/sitemap.xml
