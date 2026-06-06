@@ -22,7 +22,6 @@ const steps = [
     { id: 6, name: 'Publish', icon: Upload },
 ];
 
-// Expanded to 10 comprehensive sports
 const SPORTS = ['Cricket', 'Football', 'Badminton', 'Wrestling', 'Kabaddi', 'Karate', 'Judo', 'Tennis', 'Basketball', 'Volleyball'];
 const LEVELS = ['Wooden', 'Bronze', 'Silver', 'Gold', 'Elite'];
 const FORMATS = ['Knockout', 'League', 'Group Stage + Knockout'];
@@ -46,7 +45,7 @@ const CreateTournamentPage = () => {
     
     const [formData, setFormData] = useState({
         name: '', sport: '', level: '', banner_url: '',
-        location: '', start_date: '', end_date: '', format: '', max_teams: 8,
+        location: '', start_date: '', end_date: '', format: '', max_teams: 8, // Default 8, but infinite
         registration_mode: '', registration_deadline: '', contact_email: '',
         currency: 'INR', entry_fee: '', prize_pool: '',
         prizes: { first: '', second: '', mvp: '' },
@@ -95,7 +94,7 @@ const CreateTournamentPage = () => {
         switch (currentStep) {
             case 0: return formData.name.trim() !== '' && formData.sport !== '' && formData.level !== '';
             case 1: 
-                if (!formData.location || !formData.start_date || !formData.end_date || !formData.format) return false;
+                if (!formData.location || !formData.start_date || !formData.end_date || !formData.format || !formData.max_teams) return false;
                 if (new Date(formData.end_date) < new Date(formData.start_date)) return false;
                 return true;
             case 2: 
@@ -105,7 +104,9 @@ const CreateTournamentPage = () => {
                 // Ensure organizer doesn't over-invite
                 if (formData.registration_mode === 'invite' && invitedCoaches.length > formData.max_teams) return false;
                 return true;
-            case 3: return formData.entry_fee !== '' && formData.prize_pool !== '';
+            case 3: 
+                // Prize Pool is now optional, but Entry Fee is required
+                return formData.entry_fee !== '';
             case 4: return true; 
             default: return true;
         }
@@ -178,7 +179,7 @@ const CreateTournamentPage = () => {
             contact_email: formData.contact_email,
             currency: formData.currency, 
             entry_fee: parseFloat(formData.entry_fee) || 0, 
-            prize_pool: parseFloat(formData.prize_pool) || 0,
+            prize_pool: parseFloat(formData.prize_pool) || 0, // Fallback to 0 if left blank
             prizes: formData.prizes, 
             rules: finalRules, 
             additional_rules: formData.additional_rules
@@ -191,7 +192,7 @@ const CreateTournamentPage = () => {
             return;
         }
 
-        // 2. THE INVITATION & NOTIFICATION ENGINE[cite: 10]
+        // 2. THE INVITATION ENGINE
         if (formData.registration_mode === 'invite' && invitedCoaches.length > 0) {
             const inviteRecords = invitedCoaches.map(coachId => ({
                 tournament_id: tournament.id,
@@ -200,7 +201,6 @@ const CreateTournamentPage = () => {
                 status: 'pending'
             }));
 
-            // Insert tracking records and capture any errors
             const { data: insertedInvites, error: inviteError } = await supabase
                 .from('tournament_invitations')
                 .insert(inviteRecords)
@@ -212,7 +212,7 @@ const CreateTournamentPage = () => {
 
             if (insertedInvites && insertedInvites.length > 0) {
                 const notificationRecords = insertedInvites.map(invite => ({
-                    user_id: invite.coach_id, // Sent TO the coach
+                    user_id: invite.coach_id,
                     type: 'tournament_invite',
                     message: `You have been invited to participate in ${tournament.name}!`,
                     metadata: { 
@@ -222,21 +222,17 @@ const CreateTournamentPage = () => {
                     }
                 }));
                 
-                // Insert notifications and capture any RLS errors
                 const { error: notifError } = await supabase.from('notifications').insert(notificationRecords);
                 
                 if (notifError) {
-                    console.error("Notification RLS/Insert Error:", notifError);
-                    alert("Tournament created, but failed to send notifications. Check your Database RLS policies.");
+                    console.error("Notification Error:", notifError);
                 }
-            } else {
-                console.warn("No invites returned. RLS might be blocking the SELECT after INSERT.");
             }
         }
 
         setLoading(false);
         
-        // 3. Exact Routing Logic
+        // 3. Routing Logic
         if (formData.registration_mode === 'final') {
             router.push(`/tournament/${tournament.id}/brackets`);
         } else {
@@ -346,10 +342,21 @@ const CreateTournamentPage = () => {
             return (
                 <div className="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Select onValueChange={v => handleNestedChange('rules', 'competition_type', v)}>
-                        <SelectTrigger><SelectValue placeholder="Competition Type" /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Competition Category" /></SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="Kumite">Kumite (Sparring)</SelectItem>
-                            <SelectItem value="Kata">Kata (Forms)</SelectItem>
+                            <SelectItem value="Kumite">Kumite (Sparring Only)</SelectItem>
+                            <SelectItem value="Kata">Kata (Forms Only)</SelectItem>
+                            <SelectItem value="Kata + Kumite">Kata + Kumite (Both)</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select onValueChange={v => handleNestedChange('rules', 'belt_category', v)}>
+                        <SelectTrigger><SelectValue placeholder="Belt Category" /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="White/Yellow">White / Yellow Belt</SelectItem>
+                            <SelectItem value="Orange/Green">Orange / Green Belt</SelectItem>
+                            <SelectItem value="Blue/Brown">Blue / Brown Belt</SelectItem>
+                            <SelectItem value="Black">Black Belt</SelectItem>
+                            <SelectItem value="Open">Open Belt (All Levels)</SelectItem>
                         </SelectContent>
                     </Select>
                     <Select onValueChange={v => handleNestedChange('rules', 'rule_set', v)}>
@@ -361,7 +368,7 @@ const CreateTournamentPage = () => {
                         </SelectContent>
                     </Select>
                     <Input type="number" placeholder="Match Duration (Mins)" onChange={e => handleNestedChange('rules', 'match_duration', e.target.value)} />
-                    <Input placeholder="Allowed Weight/Belt Categories" onChange={e => handleNestedChange('rules', 'categories', e.target.value)} />
+                    <Input className="col-span-full" placeholder="Allowed Weight Categories (e.g., -60kg, -67kg, +84kg)" onChange={e => handleNestedChange('rules', 'categories', e.target.value)} />
                 </div>
             );
         }
@@ -468,7 +475,6 @@ const CreateTournamentPage = () => {
         return <p className="text-muted-foreground text-center bg-white/5 p-4 rounded-lg col-span-full">Select a sport in Step 1 for deep configurations.</p>;
     };
 
-    // Safely declare the icon explicitly for the JSX scope
     const CurrentCurrencyIcon = CURRENCIES.find(c => c.value === formData.currency)?.icon || IndianRupee;
 
     return (
@@ -536,12 +542,16 @@ const CreateTournamentPage = () => {
                                     <SelectTrigger className="h-14 bg-white/5"><SelectValue placeholder="Tournament Format" /></SelectTrigger>
                                     <SelectContent>{FORMATS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
                                 </Select>
-                                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                                    <div className="flex justify-between mb-4">
-                                        <label className="font-semibold">Maximum Teams Allowed</label>
-                                        <span className="font-bold text-primary text-xl">{formData.max_teams}</span>
-                                    </div>
-                                    <input type="range" min="4" max="64" step="2" value={formData.max_teams} onChange={e => handleInputChange('max_teams', parseInt(e.target.value, 10))} className="w-full accent-primary" />
+                                <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-muted-foreground">Maximum Teams Allowed (Leave 0 for No Limit)</label>
+                                    <Input 
+                                        type="number" 
+                                        min="2" 
+                                        placeholder="e.g. 16, 32, 100" 
+                                        className="h-14 bg-white/5" 
+                                        value={formData.max_teams || ''} 
+                                        onChange={e => handleInputChange('max_teams', e.target.value ? parseInt(e.target.value, 10) : '')} 
+                                    />
                                 </div>
                             </motion.div>
                         )}
@@ -564,7 +574,7 @@ const CreateTournamentPage = () => {
                                     <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} className="p-5 bg-white/5 rounded-xl border border-white/10 space-y-4">
                                         <div>
                                             <h3 className="font-semibold text-sm">Select Coaches to Invite <span className="text-muted-foreground font-normal">(Optional)</span></h3>
-                                            <p className="text-xs text-muted-foreground">We found coaches matching your selected sport ({formData.sport}). You can select up to {formData.max_teams} teams.</p>
+                                            <p className="text-xs text-muted-foreground">We found coaches matching your selected sport ({formData.sport}). You can select up to {formData.max_teams || 'an unlimited number of'} teams.</p>
                                         </div>
                                         
                                         {fetchingCoaches ? (
@@ -627,16 +637,16 @@ const CreateTournamentPage = () => {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-semibold text-muted-foreground">Entry Fee (Per Team/Player)</label>
+                                        <label className="text-sm font-semibold text-muted-foreground">Entry Fee (Per Team/Player) <span className="text-red-500">*</span></label>
                                         <div className="relative"><CurrentCurrencyIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" /><Input type="number" className="h-14 pl-10 bg-white/5 text-lg" placeholder="e.g. 5000 (0 for Free)" value={formData.entry_fee} onChange={e => handleInputChange('entry_fee', e.target.value)} /></div>
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-sm font-semibold text-muted-foreground">Total Prize Pool</label>
+                                        <label className="text-sm font-semibold text-muted-foreground">Total Prize Pool <span className="text-muted-foreground font-normal">(Optional)</span></label>
                                         <div className="relative"><CurrentCurrencyIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-400" /><Input type="number" className="h-14 pl-10 bg-white/5 text-lg font-bold text-green-400" placeholder="e.g. 50000" value={formData.prize_pool} onChange={e => handleInputChange('prize_pool', e.target.value)} /></div>
                                     </div>
                                 </div>
                                 <div className="p-6 bg-white/5 rounded-xl border border-white/10 space-y-4">
-                                    <h3 className="font-bold text-lg mb-2">Prize Breakdown (Optional)</h3>
+                                    <h3 className="font-bold text-lg mb-2">Prize Breakdown <span className="text-muted-foreground font-normal text-sm">(Optional)</span></h3>
                                     <Input className="bg-background/50" placeholder="1st Place (e.g. 25000 + Trophy)" onChange={e => handleNestedChange('prizes', 'first', e.target.value)} />
                                     <Input className="bg-background/50" placeholder="2nd Place" onChange={e => handleNestedChange('prizes', 'second', e.target.value)} />
                                     <Input className="bg-background/50" placeholder="MVP / Best Player" onChange={e => handleNestedChange('prizes', 'mvp', e.target.value)} />
@@ -667,7 +677,7 @@ const CreateTournamentPage = () => {
                                     <div className="p-4 bg-white/5 rounded-lg border border-white/10"><p className="text-xs text-muted-foreground uppercase">Tournament Name</p><p className="font-bold text-lg">{formData.name}</p></div>
                                     <div className="p-4 bg-white/5 rounded-lg border border-white/10"><p className="text-xs text-muted-foreground uppercase">Sport & Level</p><p className="font-bold text-lg capitalize">{formData.sport} ({formData.level})</p></div>
                                     <div className="p-4 bg-white/5 rounded-lg border border-white/10"><p className="text-xs text-muted-foreground uppercase">Mode</p><p className="font-bold text-lg capitalize text-primary">{formData.registration_mode}</p></div>
-                                    <div className="p-4 bg-white/5 rounded-lg border border-white/10"><p className="text-xs text-muted-foreground uppercase">Prize Pool</p><p className="font-bold text-lg text-green-400">{formData.currency} {formData.prize_pool}</p></div>
+                                    <div className="p-4 bg-white/5 rounded-lg border border-white/10"><p className="text-xs text-muted-foreground uppercase">Prize Pool</p><p className="font-bold text-lg text-green-400">{formData.prize_pool ? `${formData.currency} ${formData.prize_pool}` : 'None Set'}</p></div>
                                 </div>
                             </motion.div>
                         )}

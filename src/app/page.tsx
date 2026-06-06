@@ -102,12 +102,20 @@ export default function LandingPage() {
                     {!authChecking && <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
                   </button>
                 </Link>
-                <Link href="#features" className="w-full sm:w-auto">
-                  <button className="w-full sm:w-auto px-8 h-14 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 hover:shadow-sm text-slate-700 font-bold text-lg transition-all flex items-center justify-center gap-2">
-                    <Play className="w-5 h-5 text-slate-400" /> How it Works
+                
+                {/* NEW GUEST ACCESS BUTTON */}
+                <Link href="/dashboard/pulse" className="w-full sm:w-auto">
+                  <button className="w-full sm:w-auto px-8 h-14 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 hover:shadow-sm text-slate-700 font-bold text-lg transition-all flex items-center justify-center gap-2 group">
+                    <Activity className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" /> Enter Fan Zone
                   </button>
                 </Link>
               </motion.div>
+              
+              {!isAuthenticated && !authChecking && (
+                 <motion.p variants={fadeUp} className="mt-4 text-sm text-slate-500 font-medium">
+                   No account needed to view live matches and brackets.
+                 </motion.p>
+              )}
             </motion.div>
 
             {/* Right Visual (Abstract Floating UI - Light Theme) */}
@@ -251,15 +259,26 @@ export default function LandingPage() {
             <h2 className="text-5xl md:text-7xl font-black font-headline mb-6 leading-tight text-slate-900">Are you ready to play?</h2>
             <p className="text-xl text-slate-600 mb-12 max-w-2xl mx-auto">Join the organizers and coaches who are already scaling their operations. No credit card required.</p>
             
-            <Link href={ctaLink}>
-              <button 
-                disabled={authChecking}
-                className="px-10 h-16 rounded-2xl bg-slate-900 text-white font-black text-xl shadow-[0_15px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_20px_40px_rgba(0,0,0,0.2)] hover:-translate-y-1 transition-all flex items-center justify-center gap-2 mx-auto disabled:opacity-80 disabled:hover:translate-y-0"
-              >
-                {authChecking && <Loader2 className="w-5 h-5 animate-spin" />}
-                {!authChecking && ctaText}
-              </button>
-            </Link>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Link href={ctaLink}>
+                <button 
+                  disabled={authChecking}
+                  className="px-10 h-16 w-full sm:w-auto rounded-2xl bg-slate-900 text-white font-black text-xl shadow-[0_15px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_20px_40px_rgba(0,0,0,0.2)] hover:-translate-y-1 transition-all flex items-center justify-center gap-2 disabled:opacity-80 disabled:hover:translate-y-0"
+                >
+                  {authChecking && <Loader2 className="w-5 h-5 animate-spin" />}
+                  {!authChecking && ctaText}
+                </button>
+              </Link>
+
+              {/* NEW GUEST ACCESS BUTTON (BOTTOM CTA) */}
+              {!isAuthenticated && !authChecking && (
+                <Link href="/dashboard/pulse" className="w-full sm:w-auto">
+                  <button className="px-10 h-16 w-full sm:w-auto rounded-2xl bg-white border border-slate-200 text-slate-700 font-black text-xl shadow-sm hover:shadow-md hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+                    Enter Fan Zone
+                  </button>
+                </Link>
+              )}
+            </div>
             <p className="mt-6 text-sm text-slate-400 uppercase tracking-widest font-bold">#PlayByNewRules</p>
           </div>
         </section>

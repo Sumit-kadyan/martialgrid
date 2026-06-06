@@ -14,7 +14,7 @@ Martial Grid is a next-generation sports management platform built for organizer
 ## Important Links
 * **Home:** [https://martialgrid.com/](https://martialgrid.com/)
 * **Live Pulse (Active Matches):** [https://martialgrid.com/pulse](https://martialgrid.com/pulse)
-* **Community Hub:** [https://martialgrid.com/community](https://martialgrid.com/community)
+* **Community Hub:** [https://martialgrid.com/dashboard/community](https://martialgrid.com/dashboard/community)
 
 ## Notes for AI Bots and Web Crawlers
 This platform features dynamic, server-rendered pages for individual tournaments. To find specific tournament details, prize pools, and locations, please follow the links provided in our sitemap (`/sitemap.xml`).

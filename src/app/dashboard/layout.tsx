@@ -12,10 +12,10 @@ import {
   Activity,
   Globe,
   Menu,
-  X,
   ChevronLeft,
   ChevronRight,
-  Loader2
+  Loader2,
+  UserPlus
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -23,146 +23,129 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button'
 import { Notifications } from "@/components/Notifications"
 
-// --- USER PROFILE NAV (Now receives data as props) ---
+// Define safe routes for unauthenticated users
+const PUBLIC_DASHBOARD_ROUTES = ['/dashboard/pulse', '/dashboard/tournaments', '/dashboard/teams', '/dashboard/community'];
+
+// --- USER PROFILE NAV ---
 const UserProfileNav = ({ profile, loading }: { profile: any, loading: boolean }) => {
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     window.location.href = '/'
   }
 
-  const getInitials = (name: string) => {
-    if (!name) return ''
-    return name.split(' ').map(n => n[0]).join('')
-  }
-
   if (loading) {
     return <div className="w-10 h-10 rounded-full bg-black/10 animate-pulse"></div>
   }
 
+  // If the user is our spoofed guest profile, show a prompt to sign in instead of a logout menu
+  if (profile?.isGuest) {
+    return (
+      <Link href="/login" className="w-full">
+        <Button className="w-full shadow-lg gap-2" variant="default">
+          <UserPlus className="w-4 h-4" /> Sign In
+        </Button>
+      </Link>
+    )
+  }
+
   return (
-    <div className="flex items-center gap-4">
-        <Notifications />
-        <Popover>
-        <PopoverTrigger asChild>
-            <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-transform hover:scale-105">
-            <Avatar className="border border-black/10 shadow-sm">
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="flex items-center gap-3 w-full hover:bg-black/5 p-2 rounded-xl transition-colors text-left group">
+            <Avatar className="border-2 border-transparent group-hover:border-primary/50 transition-all">
                 <AvatarImage src={profile?.avatar_url} alt={profile?.name} />
-                <AvatarFallback className="bg-primary/10 text-primary font-bold">{getInitials(profile?.name || 'User')}</AvatarFallback>
+                <AvatarFallback className="bg-primary/20 text-primary font-bold">{profile?.name?.charAt(0) || 'U'}</AvatarFallback>
             </Avatar>
-            </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-64 p-2" align="end">
-            <div className="p-3 mb-2 border-b border-black/5 bg-black/5 rounded-t-md">
-              <p className="font-bold text-sm truncate">{profile?.name || 'Loading...'}</p>
-              <p className="text-[10px] uppercase tracking-widest text-primary font-bold mt-0.5">{profile?.role || 'User'}</p>
+            <div className="flex-1 overflow-hidden hidden md:block">
+                <p className="text-sm font-bold truncate text-foreground">{profile?.name}</p>
+                <p className="text-[10px] uppercase tracking-widest text-primary font-bold">{profile?.role}</p>
             </div>
-            <Link href="/profile">
-              <Button variant="ghost" className="w-full justify-start font-normal">My Profile</Button>
-            </Link>
-            <Link href="/dashboard/settings">
-              <Button variant="ghost" className="w-full justify-start font-normal">Settings</Button>
-            </Link>
-            <Button variant="ghost" onClick={handleSignOut} className="w-full justify-start font-normal text-red-500 hover:text-red-600 hover:bg-red-50">
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </Button>
-        </PopoverContent>
-        </Popover>
-    </div>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 bg-background/95 backdrop-blur-xl border-white/10 shadow-2xl rounded-xl p-2" align="end" side="top">
+          <div className="space-y-1">
+              <Link href="/profile"><Button variant="ghost" className="w-full justify-start hover:bg-white/5">My Profile</Button></Link>
+              <Link href="/dashboard/settings"><Button variant="ghost" className="w-full justify-start hover:bg-white/5">Settings</Button></Link>
+          </div>
+          <div className="mt-2 pt-2 border-t border-white/10">
+              <Button variant="ghost" onClick={handleSignOut} className="w-full justify-start text-red-500 hover:text-red-400 hover:bg-red-500/10">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Logout
+              </Button>
+          </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
-// --- MAIN DASHBOARD LAYOUT ---
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  
-  const [isMobileOpen, setIsMobileOpen] = useState(false)
-  const [isCollapsed, setIsCollapsed] = useState(false)
-  
-  // Lifted Auth State
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [isCollapsed, setIsCollapsed] = useState(false)
+  const [isMobileOpen, setIsMobileOpen] = useState(false)
 
-  // 1. Fetch User & Role for RBAC (Role-Based Access Control)
   useEffect(() => {
-    const checkAuthAndRole = async () => {
+    const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       
       if (!session) {
-        window.location.href = '/login'
-        return
+        // If not logged in, check if they are trying to access a public fan zone
+        const isPublicRoute = PUBLIC_DASHBOARD_ROUTES.some(route => pathname.startsWith(route));
+        
+        if (isPublicRoute) {
+          // Spoof a guest fan profile so the sidebar renders correctly
+          setProfile({ role: 'fan', name: 'Spectator', isGuest: true });
+          setLoading(false);
+          return;
+        } else {
+          // Kick them out if trying to hit a restricted route
+          router.push('/login');
+          return;
+        }
       }
 
+      // If logged in, fetch normal profile
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
         .single()
-      
-      setProfile(profileData)
 
-      // 🚨 SECURITY REDIRECT: If a Fan tries to load the Organizer Overview, bounce them to Pulse.
-      if (profileData?.role === 'fan' && pathname === '/dashboard/overview') {
-        router.replace('/dashboard/pulse')
+      if (profileData) {
+        setProfile(profileData)
       } else {
-        setLoading(false)
+        router.push('/onboarding')
       }
+      setLoading(false)
     }
 
-    checkAuthAndRole()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) window.location.href = '/login'
-    })
-
-    return () => subscription.unsubscribe()
+    checkAuth()
   }, [pathname, router])
 
-  // Close mobile sidebar when route changes
-  useEffect(() => {
-    setIsMobileOpen(false)
-  }, [pathname])
+  // Dynamically change names based on role (Fans see "Tournaments", Organizers see "My Tournaments")
+  const getNavItems = (role: string) => [
+    { name: 'Overview', href: '/dashboard/overview', icon: LayoutDashboard, roles: ['organizer'] },
+    { name: 'Live Pulse', href: '/dashboard/pulse', icon: Activity, roles: ['organizer', 'coach', 'player', 'fan'] },
+    { name: role === 'fan' ? 'Tournaments' : 'My Tournaments', href: '/dashboard/tournaments', icon: Trophy, roles: ['organizer', 'coach', 'player', 'fan'] },
+    { name: role === 'fan' ? 'Teams' : 'My Teams', href: '/dashboard/teams', icon: Users, roles: ['coach', 'player', 'fan'] },
+    { name: 'Community Hub', href: '/dashboard/community', icon: Globe, roles: ['organizer', 'coach', 'player', 'fan'] },
+  ].filter(item => item.roles.includes(role));
 
-  // Prevent background scrolling when mobile menu is open
-  useEffect(() => {
-    if (isMobileOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = 'unset'
-    }
-    return () => { document.body.style.overflow = 'unset' }
-  }, [isMobileOpen])
-
-  // 2. Dynamic Navigation Array
-  const navItems = [
-    // The hideFor property allows us to dynamically remove this from the Fan's sidebar
-    { name: 'Overview', href: '/dashboard/overview', icon: LayoutDashboard, hideFor: ['fan'] },
-    { name: 'Live Pulse', href: '/dashboard/pulse', icon: Activity },
-    { name: 'Tournaments', href: '/dashboard/tournaments', icon: Trophy },
-    { name: 'Teams', href: '/dashboard/teams', icon: Users },
-    { name: 'Community', href: '/dashboard/community', icon: Globe },
-  ]
-
-  // Filter out items the current user role shouldn't see
-  const filteredNavItems = navItems.filter(item => !item.hideFor?.includes(profile?.role))
-
-  // Block rendering until we know their role to prevent layout flashes
   if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-primary animate-spin" />
-      </div>
-    )
+    return <div className="flex justify-center items-center h-screen bg-background"><Loader2 className="w-12 h-12 animate-spin text-primary" /></div>
   }
 
+  const filteredNavItems = getNavItems(profile?.role || 'fan');
+
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="min-h-screen flex bg-background text-foreground">
       
-      {/* Mobile Overlay Background */}
+      {/* Mobile Overlay */}
       {isMobileOpen && (
         <div 
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden transition-opacity"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
@@ -170,82 +153,71 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar */}
       <aside 
         className={cn(
-          "fixed h-screen z-50 border-r border-black/5 glass-surface flex flex-col transition-all duration-300 ease-in-out bg-white/80 backdrop-blur-xl",
-          isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
-          isCollapsed ? "md:w-20" : "w-64"
+          "fixed top-0 left-0 z-50 h-screen bg-background border-r border-white/5 transition-all duration-300 ease-in-out flex flex-col",
+          isCollapsed ? "w-20" : "w-64",
+          isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
-        {/* Desktop Collapse Toggle Button */}
-        <button 
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="hidden md:flex absolute -right-3 top-8 bg-white border border-black/10 shadow-sm rounded-full p-1 z-50 hover:bg-black/5 text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-        </button>
-
-        {/* Logo Area */}
-        <div className={cn("flex items-center mb-7 pt-6", isCollapsed ? "justify-center px-0" : "px-6 justify-between")}>
-          <Link href="/" className="flex items-center justify-center">
-            <img 
-              src={isCollapsed ? "/icon.png" : "/logo.webp"} 
-              alt="Platform Logo" 
-              className={cn("transition-all duration-300 object-contain", isCollapsed ? "h-10 w-10" : "h-20 w-auto")} 
-            />
-          </Link>
-          
-          {/* Mobile Close Button */}
-          <button 
-            className="md:hidden p-2 rounded-lg hover:bg-black/5 text-muted-foreground"
-            onClick={() => setIsMobileOpen(false)}
-          >
-            <X className="w-5 h-5" />
-          </button>
+        <div className="h-20 flex items-center justify-between px-6 border-b border-white/5">
+           {!isCollapsed && (
+              <Link href="/" className="font-headline font-black text-lg tracking-tight flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <img 
+                src="/icon.png" 
+                alt="Martial Grid Icon" 
+                className="w-10 h-10 object-contain" 
+              />
+              MARTIAL GRID
+            </Link>
+           )}
+           <button 
+             onClick={() => setIsCollapsed(!isCollapsed)} 
+             className="hidden md:flex p-2 rounded-lg hover:bg-white/5 transition-colors text-muted-foreground"
+           >
+             {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+           </button>
         </div>
 
-        {/* Navigation Links */}
-        <nav className="flex-1 space-y-2 px-4 overflow-y-auto overflow-x-hidden no-scrollbar">
+        <nav className="flex-1 py-6 px-3 space-y-2 overflow-y-auto no-scrollbar">
           {filteredNavItems.map((item) => {
-            const Icon = item.icon
             const isActive = pathname.startsWith(item.href)
             return (
-              <Link
-                key={item.name}
-                href={item.href}
-                title={isCollapsed ? item.name : undefined} 
-                className={cn(
-                  "flex items-center rounded-xl text-sm font-medium transition-all group overflow-hidden",
-                  isCollapsed ? "justify-center p-3" : "gap-3 px-4 py-3",
-                  isActive 
-                    ? "bg-primary text-white neon-glow-blue shadow-md" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-black/5"
-                )}
-              >
-                <Icon className={cn("w-5 h-5 shrink-0 transition-colors", isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground")} />
-                
+              <Link key={item.name} href={item.href}>
                 <span className={cn(
-                  "whitespace-nowrap transition-all duration-300",
-                  isCollapsed ? "opacity-0 w-0 translate-x-10 hidden" : "opacity-100 w-auto translate-x-0 block"
+                  "flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-bold transition-all group",
+                  isActive 
+                    ? "bg-primary/20 text-primary shadow-sm border border-primary/30" 
+                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground border border-transparent"
                 )}>
-                  {item.name}
+                  <item.icon className={cn("w-5 h-5 shrink-0", isActive ? "text-primary" : "group-hover:text-foreground")} />
+                  <span className={cn(
+                    "overflow-hidden transition-all duration-300 whitespace-nowrap",
+                    isCollapsed ? "opacity-0 w-0 hidden" : "opacity-100 w-auto translate-x-0 block"
+                  )}>
+                    {item.name}
+                  </span>
                 </span>
               </Link>
             )
           })}
         </nav>
+
+        {/* Bottom Profile / Sign In Section */}
+        <div className="p-4 border-t border-white/5 bg-black/20">
+            <UserProfileNav profile={profile} loading={loading} />
+        </div>
       </aside>
 
       {/* Main Content Area */}
       <main 
         className={cn(
-          "flex-1 transition-all duration-300 ease-in-out flex flex-col min-w-0",
+          "flex-1 transition-all duration-300 ease-in-out flex flex-col min-w-0 relative",
           isCollapsed ? "md:pl-20" : "md:pl-64"
         )}
       >
-        <header className="h-20 px-4 sm:px-8 flex items-center justify-between border-b border-black/5 bg-white/40 backdrop-blur-md sticky top-0 z-30">
+        <header className="h-20 px-4 sm:px-8 flex items-center justify-between border-b border-white/5 bg-background/60 backdrop-blur-md sticky top-0 z-30">
           <div className="flex items-center gap-3 sm:gap-4">
-            {/* Mobile Hamburger Button */}
             <button 
-              className="md:hidden p-2 -ml-2 rounded-lg hover:bg-black/5 text-muted-foreground transition-colors"
+              className="md:hidden p-2 -ml-2 rounded-lg hover:bg-white/5 text-muted-foreground transition-colors"
               onClick={() => setIsMobileOpen(true)}
             >
               <Menu className="w-6 h-6" />
@@ -255,14 +227,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </h1>
           </div>
           
-          {/* We pass the fetched profile and loading state directly to the Nav */}
-          <UserProfileNav profile={profile} loading={loading} />
+          <div className="flex items-center gap-4">
+            {!profile?.isGuest && <Notifications />}
+          </div>
         </header>
 
-        <div className="p-4 sm:p-8">
-          {children}
+        <div className="flex-1 overflow-x-hidden relative">
+           <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.03] mix-blend-screen pointer-events-none z-0" />
+           <div className="relative z-10 p-4 sm:p-8">
+             {children}
+           </div>
         </div>
       </main>
+
     </div>
   )
 }

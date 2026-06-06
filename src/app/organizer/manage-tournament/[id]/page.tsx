@@ -170,10 +170,8 @@ const ManageTournamentPage = () => {
         if (!teamToRemove) return;
         const { teamId, coachId } = teamToRemove;
 
-        // 1. Remove the team from the active tournament roster
         await supabase.from('teams').delete().eq('id', teamId);
         
-        // 2. RLS-SAFE FIX: Update invite to rejected (safer than trying to DELETE which databases often block)
         await supabase.from('tournament_invitations')
             .update({ status: 'rejected' })
             .eq('tournament_id', tournamentId)
@@ -184,9 +182,10 @@ const ManageTournamentPage = () => {
         showToast("Team removed. You can now send them a new invite.", "success");
     };
 
-    // --- RLS SAFE INVITE ENGINE ---
     const handleSendInvite = async (coachId: string) => {
-        if (participants.length + pendingInvites.length >= tournament.max_teams) {
+        // FIX: Respect infinite limit (0 or null)
+        const limit = tournament.max_teams || 0;
+        if (limit > 0 && participants.length + pendingInvites.length >= limit) {
             showToast("You have reached the maximum number of teams.", "error");
             return;
         }
@@ -194,7 +193,6 @@ const ManageTournamentPage = () => {
         setInvitingCoachId(coachId);
 
         try {
-            // 1. Check if the coach already has ANY invite history for this tournament
             const { data: existingInvite } = await supabase
                 .from('tournament_invitations')
                 .select('id')
@@ -204,9 +202,7 @@ const ManageTournamentPage = () => {
 
             let inviteId = existingInvite?.id;
 
-            // 2. RLS-SAFE LOGIC: Do not chain .select().single() on mutations to prevent `{}` crash
             if (existingInvite) {
-                // Reactivate old invite
                 const { error: updErr } = await supabase
                     .from('tournament_invitations')
                     .update({ status: 'pending' })
@@ -214,7 +210,6 @@ const ManageTournamentPage = () => {
                     
                 if (updErr) throw updErr;
             } else {
-                // Create brand new invite
                 const { error: insErr } = await supabase
                     .from('tournament_invitations')
                     .insert({
@@ -226,7 +221,6 @@ const ManageTournamentPage = () => {
                     
                 if (insErr) throw insErr;
                 
-                // Fetch the new ID safely afterwards
                 const { data: newInv } = await supabase
                     .from('tournament_invitations')
                     .select('id')
@@ -237,7 +231,6 @@ const ManageTournamentPage = () => {
                 if (newInv) inviteId = newInv.id;
             }
 
-            // 3. Fire the notification
             await supabase.from('notifications').insert({
                 user_id: coachId, 
                 type: 'tournament_invite',
@@ -264,23 +257,88 @@ const ManageTournamentPage = () => {
     if (loading) return <DashboardLayout><div className="flex justify-center items-center h-screen"><Loader2 className="w-12 h-12 animate-spin text-primary" /></div></DashboardLayout>;
     if (!tournament) return <DashboardLayout><div className="flex justify-center items-center h-screen text-xl font-bold">Tournament not found.</div></DashboardLayout>;
 
-    // --- DYNAMIC SPORT RULES ---
+    const maxTeamsDisplay = tournament.max_teams > 0 ? tournament.max_teams : '∞';
+
+    // --- DYNAMIC SPORT RULES PORTED FROM CREATE PAGE ---
     const renderSportRules = () => {
         const sport = tournament.sport?.toLowerCase();
+        
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                 {sport === 'cricket' && (
                     <>
                         <div className="space-y-2"><Label>Overs</Label><Input type="number" className="bg-white/5" value={tournament.rules?.overs || ''} onChange={(e) => handleRuleChange('overs', e.target.value)} /></div>
-                        <div className="space-y-2"><Label>Ball Type</Label><Input className="bg-white/5" value={tournament.rules?.ball_type || ''} onChange={(e) => handleRuleChange('ball_type', e.target.value)} /></div>
+                        <div className="space-y-2"><Label>Squad Size</Label><Input type="number" className="bg-white/5" value={tournament.rules?.squad_size || ''} onChange={(e) => handleRuleChange('squad_size', e.target.value)} /></div>
+                        <div className="space-y-2">
+                            <Label>Ball Type</Label>
+                            <Select onValueChange={v => handleRuleChange('ball_type', v)} value={tournament.rules?.ball_type || ''}>
+                                <SelectTrigger className="bg-white/5"><SelectValue placeholder="Ball Type" /></SelectTrigger>
+                                <SelectContent><SelectItem value="Tennis">Tennis Ball</SelectItem><SelectItem value="Leather">Leather Ball</SelectItem></SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Pitch Type</Label>
+                            <Select onValueChange={v => handleRuleChange('pitch_type', v)} value={tournament.rules?.pitch_type || ''}>
+                                <SelectTrigger className="bg-white/5"><SelectValue placeholder="Pitch Type" /></SelectTrigger>
+                                <SelectContent><SelectItem value="Turf">Turf</SelectItem><SelectItem value="Matting">Matting</SelectItem><SelectItem value="Cement">Cement</SelectItem></SelectContent>
+                            </Select>
+                        </div>
                     </>
                 )}
                 {sport === 'football' && (
                     <>
-                        <div className="space-y-2"><Label>Match Type</Label><Input className="bg-white/5" value={tournament.rules?.match_type || ''} onChange={(e) => handleRuleChange('match_type', e.target.value)} /></div>
                         <div className="space-y-2"><Label>Half Duration (mins)</Label><Input type="number" className="bg-white/5" value={tournament.rules?.half_duration || ''} onChange={(e) => handleRuleChange('half_duration', e.target.value)} /></div>
+                        <div className="space-y-2"><Label>Max Substitutions</Label><Input type="number" className="bg-white/5" value={tournament.rules?.subs || ''} onChange={(e) => handleRuleChange('subs', e.target.value)} /></div>
+                        <div className="space-y-2">
+                            <Label>Match Format</Label>
+                            <Select onValueChange={v => handleRuleChange('match_type', v)} value={tournament.rules?.match_type || ''}>
+                                <SelectTrigger className="bg-white/5"><SelectValue placeholder="Format" /></SelectTrigger>
+                                <SelectContent><SelectItem value="5v5">5-a-side</SelectItem><SelectItem value="7v7">7-a-side</SelectItem><SelectItem value="11v11">11-a-side</SelectItem></SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Offside Rule</Label>
+                            <Select onValueChange={v => handleRuleChange('offside', v)} value={tournament.rules?.offside || ''}>
+                                <SelectTrigger className="bg-white/5"><SelectValue placeholder="Offside" /></SelectTrigger>
+                                <SelectContent><SelectItem value="Yes">Enforced</SelectItem><SelectItem value="No">Not Enforced</SelectItem></SelectContent>
+                            </Select>
+                        </div>
                     </>
                 )}
+                {sport === 'badminton' && (
+                    <>
+                        <div className="space-y-2"><Label>Points per Game</Label><Input type="number" className="bg-white/5" value={tournament.rules?.points || ''} onChange={(e) => handleRuleChange('points', e.target.value)} /></div>
+                        <div className="space-y-2"><Label>Best of (Sets)</Label><Input type="number" className="bg-white/5" value={tournament.rules?.best_of || ''} onChange={(e) => handleRuleChange('best_of', e.target.value)} /></div>
+                        <div className="space-y-2">
+                            <Label>Match Format</Label>
+                            <Select onValueChange={v => handleRuleChange('match_format', v)} value={tournament.rules?.match_format || ''}>
+                                <SelectTrigger className="bg-white/5"><SelectValue placeholder="Format" /></SelectTrigger>
+                                <SelectContent><SelectItem value="Singles">Singles Only</SelectItem><SelectItem value="Doubles">Doubles Only</SelectItem><SelectItem value="Team Event">Team Event</SelectItem></SelectContent>
+                            </Select>
+                        </div>
+                    </>
+                )}
+                {sport === 'karate' && (
+                    <>
+                        <div className="space-y-2">
+                            <Label>Competition Category</Label>
+                            <Select onValueChange={v => handleRuleChange('competition_type', v)} value={tournament.rules?.competition_type || ''}>
+                                <SelectTrigger className="bg-white/5"><SelectValue placeholder="Category" /></SelectTrigger>
+                                <SelectContent><SelectItem value="Kumite">Kumite (Sparring Only)</SelectItem><SelectItem value="Kata">Kata (Forms Only)</SelectItem><SelectItem value="Kata + Kumite">Kata + Kumite (Both)</SelectItem></SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Belt Category</Label>
+                            <Select onValueChange={v => handleRuleChange('belt_category', v)} value={tournament.rules?.belt_category || ''}>
+                                <SelectTrigger className="bg-white/5"><SelectValue placeholder="Belt" /></SelectTrigger>
+                                <SelectContent><SelectItem value="White/Yellow">White / Yellow</SelectItem><SelectItem value="Orange/Green">Orange / Green</SelectItem><SelectItem value="Blue/Brown">Blue / Brown</SelectItem><SelectItem value="Black">Black Belt</SelectItem><SelectItem value="Open">Open Belt</SelectItem></SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2"><Label>Match Duration (Mins)</Label><Input type="number" className="bg-white/5" value={tournament.rules?.match_duration || ''} onChange={(e) => handleRuleChange('match_duration', e.target.value)} /></div>
+                        <div className="space-y-2"><Label>Categories / Weights</Label><Input className="bg-white/5" value={tournament.rules?.categories || ''} onChange={(e) => handleRuleChange('categories', e.target.value)} /></div>
+                    </>
+                )}
+                {/* Fallback & Additional Rules for all sports */}
                 <div className="col-span-full space-y-2">
                     <Label>Additional Rules / Notes</Label>
                     <Textarea className="bg-white/5 min-h-[100px]" value={tournament.additional_rules || ''} onChange={(e) => handleDetailChange('additional_rules', e.target.value)} />
@@ -365,7 +423,7 @@ const ManageTournamentPage = () => {
                     {[
                         { id: 'details', icon: Edit, label: 'Core Details' },
                         { id: 'settings', icon: Settings, label: 'Sport Config' },
-                        { id: 'participants', icon: Users, label: `Teams (${participants.length}/${tournament.max_teams})` },
+                        { id: 'participants', icon: Users, label: `Teams (${participants.length}/${maxTeamsDisplay})` },
                         { id: 'matches', icon: Trophy, label: 'Brackets' }
                     ].map(tab => (
                         <button
@@ -390,7 +448,7 @@ const ManageTournamentPage = () => {
                                     <div><Label>Tournament Name</Label><Input className="bg-white/5 h-12 text-lg" value={tournament.name || ''} onChange={(e) => handleDetailChange('name', e.target.value)} /></div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div className="space-y-2"><Label>Location / Venue</Label><div className="relative"><MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"/><Input className="bg-white/5 h-12 pl-10" value={tournament.location || ''} onChange={(e) => handleDetailChange('location', e.target.value)} /></div></div>
-                                        <div className="space-y-2"><Label>Max Teams Allowed</Label><Input type="number" className="bg-white/5 h-12" value={tournament.max_teams || ''} onChange={(e) => handleDetailChange('max_teams', parseInt(e.target.value, 10))} /></div>
+                                        <div className="space-y-2"><Label>Max Teams Allowed (0 for Infinite)</Label><Input type="number" className="bg-white/5 h-12" value={tournament.max_teams || ''} onChange={(e) => handleDetailChange('max_teams', e.target.value ? parseInt(e.target.value, 10) : 0)} /></div>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div className="space-y-2"><Label>Start Date</Label><div className="relative"><Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"/><Input type="date" className="bg-white/5 h-12 pl-10" value={tournament.start_date || ''} onChange={(e) => handleDetailChange('start_date', e.target.value)} /></div></div>
@@ -408,7 +466,7 @@ const ManageTournamentPage = () => {
                                                 </SelectContent>
                                             </Select>
                                         </div>
-                                        <div className="space-y-2"><Label>Total Prize Pool</Label><Input type="number" className="bg-white/5 h-12 font-bold text-green-400" value={tournament.prize_pool || ''} onChange={(e) => handleDetailChange('prize_pool', e.target.value)} /></div>
+                                        <div className="space-y-2"><Label>Total Prize Pool <span className="text-muted-foreground text-xs">(Optional)</span></Label><Input type="number" className="bg-white/5 h-12 font-bold text-green-400" value={tournament.prize_pool || ''} onChange={(e) => handleDetailChange('prize_pool', e.target.value)} /></div>
                                     </div>
                                 </div>
                             </div>
@@ -431,7 +489,7 @@ const ManageTournamentPage = () => {
                             <GlassCard className="p-6">
                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-white/10 pb-4">
                                     <div>
-                                        <h2 className="text-2xl font-bold">Approved Teams ({participants.length}/{tournament.max_teams})</h2>
+                                        <h2 className="text-2xl font-bold">Approved Teams ({participants.length}/{maxTeamsDisplay})</h2>
                                         <p className="text-sm text-muted-foreground">Teams currently registered in the tournament.</p>
                                     </div>
                                     <div className="flex gap-2">
@@ -459,7 +517,6 @@ const ManageTournamentPage = () => {
                                                         <AvatarFallback className="bg-primary/20 text-primary">{team.name?.charAt(0)}</AvatarFallback>
                                                     </Avatar>
                                                     <div className="overflow-hidden">
-                                                                            {/* Made the team name clickable linking to the Team Details page */}
                                                         <Link href={`/team/${team.id}`}>
                                                             <h4 className="font-bold text-lg truncate hover:text-primary transition-colors cursor-pointer">
                                                                 {team.name}
