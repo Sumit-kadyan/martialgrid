@@ -18,13 +18,13 @@ export const metadata: Metadata = {
     siteName: 'Martial Grid',
     title: 'Martial Grid | Play By New Rules',
     description: 'Stop playing by the old rules. Scale your sports events with auto-brackets and live scoring telemetry.',
-    images: [{ url: '/og-image.jpg', width: 1200, height: 630, alt: 'Martial Grid Dashboard' }],
+    images: [{ url: '/og-image.webg', width: 1200, height: 630, alt: 'Martial Grid Dashboard' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Martial Grid | Elite Tournament Management',
     description: 'Scale your sports events with auto-brackets and live scoring telemetry.',
-    images: ['/og-image.jpg'], // Ensure you add a high-res image at public/og-image.jpg
+    images: ['/og-image.webg'], // Ensure you add a high-res image at public/og-image.jpg
   },
   robots: {
     index: true,
