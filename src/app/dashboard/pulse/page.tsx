@@ -14,64 +14,90 @@ export default function PulseDashboard() {
   const [activeSpectators, setActiveSpectators] = useState(0)
 
   useEffect(() => {
-    // 1. Fetch initial live matches
+    // 1. Fetch live matches using a bulletproof 2-step process
     const fetchLiveMatches = async () => {
-      setLoading(true)
-      const { data, error } = await supabase
-        .from('match_details')
-        .select('*, tournaments(name, sport)')
+      setLoading(true);
+      
+      // Step A: Fetch base matches directly (bypass views)
+      const { data: matches, error } = await supabase
+        .from('matches')
+        .select('*')
         .eq('status', 'live')
-        .order('start_time', { ascending: false })
+        .order('start_date', { ascending: false });
 
-      if (!error && data) {
-        setLiveMatches(data)
-        // Simulate spectator count based on live matches for the arena stats
-        setActiveSpectators(data.length > 0 ? Math.floor(Math.random() * 500) + (data.length * 1200) : 0)
+      if (error) {
+        console.error("Pulse Fetch Error:", error);
+        setLoading(false);
+        return;
       }
-      setLoading(false)
-    }
 
-    fetchLiveMatches()
+      if (matches && matches.length > 0) {
+        // Step B: Manually fetch associated tournament names
+        const tourneyIds = [...new Set(matches.map(m => m.tournament_id))];
+        const { data: tournaments } = await supabase
+          .from('tournaments')
+          .select('id, name, sport')
+          .in('id', tourneyIds);
 
-    // 2. Subscribe to REALTIME score updates
+        // Step C: Manually stitch the tournament data
+        const enrichedMatches = matches.map(m => ({
+          ...m,
+          tournaments: tournaments?.find(t => t.id === m.tournament_id) || { name: 'Unknown', sport: 'Match' }
+        }));
+
+        setLiveMatches(enrichedMatches);
+        setActiveSpectators(Math.floor(Math.random() * 500) + (matches.length * 1200));
+      } else {
+        setLiveMatches([]);
+      }
+      setLoading(false);
+    };
+
+    fetchLiveMatches();
+
+    // 2. Subscribe to REALTIME updates
     const channel = supabase.channel('live-pulse')
       .on('postgres_changes', { 
-          event: 'UPDATE', 
+          event: '*', // Listen to updates AND inserts
           schema: 'public', 
-          table: 'matches', 
-          filter: "status=eq.'live'" 
-      }, (payload) => {
-          // Instantly update the score in the UI when the database changes
-          setLiveMatches(currentMatches => 
-             currentMatches.map(match => 
-                match.id === payload.new.id 
-                ? { ...match, score_data: payload.new.score_data } 
-                : match
-             )
-          )
+          table: 'matches' 
+      }, () => {
+          fetchLiveMatches(); // Refresh the list when anything changes
       })
-      .subscribe()
+      .subscribe();
 
     return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [])
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Dynamic JSONB Score Parser
-  const displayScore = (scoreData: any, teamKey: 'team_a' | 'team_b') => {
-     if (!scoreData || !scoreData[teamKey]) return '0'
-     const s = scoreData[teamKey]
-     
-     // Generic (Football, Badminton, etc.)
-     if (typeof s === 'number' || typeof s === 'string') return s
-     // Cricket format
-     if (s.runs !== undefined) return `${s.runs}/${s.wickets || 0}`
-     // Fallbacks
-     if (s.goals !== undefined) return s.goals
-     if (s.points !== undefined) return s.points
-     
-     return '0'
-  }
+  // Dynamic JSONB Score Parser
+  const displayScore = (match: any, side: 'a' | 'b') => {
+    const scoreData = match.score_data;
+    
+    // Dynamically grab the correct ID based on individual or team sport
+    const participantId = side === 'a' 
+       ? (match.player_a_id || match.team_a_id) 
+       : (match.player_b_id || match.team_b_id);
+    
+    if (!scoreData || !participantId || !scoreData[participantId]) return '0';
+    
+    const s = scoreData[participantId];
+    
+    // 1. Pro Bracket / Martial Arts Structure ({ score: 2, warnings: 0 })
+    if (s.score !== undefined) return s.score;
+    
+    // 2. Generic (Football, Badminton, etc.)
+    if (typeof s === 'number' || typeof s === 'string') return s;
+    // 3. Cricket format
+    if (s.runs !== undefined) return `${s.runs}/${s.wickets || 0}`;
+    // 4. Fallbacks
+    if (s.goals !== undefined) return s.goals;
+    if (s.points !== undefined) return s.points;
+    
+    return '0';
+ }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto p-4 sm:p-8">
@@ -124,14 +150,14 @@ export default function PulseDashboard() {
                                     <div className="flex-1 flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto text-center sm:text-right justify-end">
                                         <div className="order-2 sm:order-1">
                                             <div className="text-xl sm:text-2xl font-bold text-foreground line-clamp-1">{match.team_a_name || 'Team A'}</div>
-                                            <div className="text-[10px] text-muted-foreground font-bold tracking-widest uppercase mt-1">HOME</div>
+                                            <div className="text-[10px] text-muted-foreground font-bold tracking-widest uppercase mt-1">A</div>
                                         </div>
                                         <Avatar className="w-16 h-16 sm:w-20 sm:h-20 border-2 border-white/10 order-1 sm:order-2 shadow-lg">
                                             <AvatarImage src={match.team_a_logo} />
                                             <AvatarFallback className="bg-white/5 text-xl font-black">{match.team_a_name?.charAt(0)}</AvatarFallback>
                                         </Avatar>
                                         <div className="text-4xl sm:text-5xl font-headline font-black text-primary px-4 order-3 sm:order-3 w-full sm:w-auto text-center">
-                                            {displayScore(match.score_data, 'team_a')}
+                                          {displayScore(match, 'a')}
                                         </div>
                                     </div>
 
@@ -144,7 +170,7 @@ export default function PulseDashboard() {
                                     {/* Team B */}
                                     <div className="flex-1 flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto text-center sm:text-left justify-start">
                                         <div className="text-4xl sm:text-5xl font-headline font-black text-primary px-4 w-full sm:w-auto text-center">
-                                            {displayScore(match.score_data, 'team_b')}
+                                          {displayScore(match, 'b')}
                                         </div>
                                         <Avatar className="w-16 h-16 sm:w-20 sm:h-20 border-2 border-white/10 shadow-lg">
                                             <AvatarImage src={match.team_b_logo} />
@@ -152,7 +178,7 @@ export default function PulseDashboard() {
                                         </Avatar>
                                         <div>
                                             <div className="text-xl sm:text-2xl font-bold text-foreground line-clamp-1">{match.team_b_name || 'Team B'}</div>
-                                            <div className="text-[10px] text-muted-foreground font-bold tracking-widest uppercase mt-1">AWAY</div>
+                                            <div className="text-[10px] text-muted-foreground font-bold tracking-widest uppercase mt-1">B</div>
                                         </div>
                                     </div>
 
@@ -162,7 +188,12 @@ export default function PulseDashboard() {
                                 <div className="bg-black/20 border-t border-white/5 p-3 flex justify-center sm:justify-end">
                                     <Link href={`/tournament/${match.tournament_id}`}>
                                         <button className="text-xs font-bold text-primary hover:text-primary/80 transition-colors flex items-center gap-2 bg-primary/10 px-4 py-2 rounded-lg">
-                                            Enter Match Center <ExternalLink className="w-3.5 h-3.5" />
+                                            View tournament <ExternalLink className="w-3.5 h-3.5" />
+                                        </button>
+                                    </Link>
+                                    <Link href={`/live/${match.id}`}>
+                                        <button className="text-xs font-bold text-primary hover:text-primary/80 transition-colors flex items-center gap-2 bg-primary/10 px-4 py-2 rounded-lg">
+                                            Enter Match <ExternalLink className="w-3.5 h-3.5" />
                                         </button>
                                     </Link>
                                 </div>
